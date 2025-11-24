@@ -1,4 +1,4 @@
-// Camera functionality
+// Camera + creation workspace logic with live filters/overlays
 const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const previewCanvas = document.getElementById('previewCanvas');
@@ -13,6 +13,8 @@ const emojiButtons = document.querySelectorAll('.emoji-chip');
 const emojiSizeInput = document.getElementById('emojiSize');
 const emojiSizeBubble = document.getElementById('emojiSizeBubble');
 const clearEmojisBtn = document.getElementById('clearEmojis');
+const removeEmojiBtn = document.getElementById('removeEmoji');
+const removeStickerBtn = document.getElementById('removeSticker');
 const viewportPlaceholder = document.getElementById('viewportPlaceholder');
 const tabButtons = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
@@ -24,18 +26,24 @@ const emojiItems = document.querySelectorAll('#emojiList .emoji-chip');
 const cameraStatus = document.getElementById('cameraStatus');
 
 let stream = null;
-let selectedSticker = null;
 let capturedImage = null;
+let baseImageEl = null;
 let currentFilter = 'none';
 let selectedEmoji = null;
-const emojiOverlays = [];
+let selectedSticker = null;
 let cameraActive = false;
 let previewMode = false;
+let liveRenderId = null;
+
+const emojiOverlays = [];
+const stickerOverlays = [];
+const stickerCache = new Map();
+const activeCategories = { stickers: 'all', emojis: 'all' };
 let activeTab = 'stickers';
-const activeCategories = {
-    stickers: 'all',
-    emojis: 'all'
-};
+let resizingEmoji = null;
+const MIN_EMOJI_SIZE = 24;
+const MAX_EMOJI_SIZE = 200;
+const STICKER_DEFAULT_SIZE = 150;
 
 const filterMap = {
     none: 'none',
@@ -47,11 +55,16 @@ const filterMap = {
     noir: 'grayscale(1) contrast(1.2) brightness(0.92)'
 };
 
+const setCameraStatus = text => cameraStatus && (cameraStatus.textContent = text);
+
 const clearEmojiSelection = () => {
-    if (emojiButtons.length) {
-        emojiButtons.forEach(btn => btn.classList.remove('active'));
-    }
+    emojiButtons.forEach(btn => btn.classList.remove('active'));
     selectedEmoji = null;
+};
+
+const clearAllSelections = () => {
+    clearEmojiSelection();
+    clearStickerSelection();
 };
 
 const resetEmojiOverlays = () => {
@@ -59,10 +72,22 @@ const resetEmojiOverlays = () => {
     clearEmojiSelection();
 };
 
-const setCameraStatus = text => {
-    if (cameraStatus) {
-        cameraStatus.textContent = text;
-    }
+const resetStickerOverlays = () => {
+    stickerOverlays.length = 0;
+    selectedSticker = null;
+    stickerItems.forEach(s => s.classList.remove('active'));
+};
+
+const clearStickerSelection = () => {
+    selectedSticker = null;
+    stickerItems.forEach(s => s.classList.remove('active'));
+};
+
+const updateViewportState = () => {
+    const hasImage = capturedImage || cameraActive;
+    if (previewCanvas) previewCanvas.classList.toggle('active', !!hasImage);
+    if (video) video.classList.toggle('hidden', !!hasImage);
+    if (viewportPlaceholder) viewportPlaceholder.classList.toggle('hidden', !!hasImage || cameraActive);
 };
 
 const updateSizeBubble = () => {
@@ -71,9 +96,8 @@ const updateSizeBubble = () => {
     const min = parseInt(emojiSizeInput.min || '0', 10);
     const max = parseInt(emojiSizeInput.max || '100', 10);
     const percent = ((value - min) / (max - min)) * 100;
-    const clamped = Math.min(Math.max(percent, 0), 100);
     emojiSizeBubble.textContent = `${value}px`;
-    emojiSizeBubble.style.left = `${clamped}%`;
+    emojiSizeBubble.style.left = `${Math.min(Math.max(percent, 0), 100)}%`;
 };
 
 const applyPickerFilters = () => {
@@ -100,16 +124,113 @@ const applyPickerFilters = () => {
     }
 };
 
+const toggleUploadZone = isActive => uploadZone && uploadZone.classList[isActive ? 'add' : 'remove']('dragging');
+
+const stopLiveRender = () => {
+    if (liveRenderId) {
+        cancelAnimationFrame(liveRenderId);
+        liveRenderId = null;
+    }
+};
+
+const drawStickers = ctx => {
+    if (!stickerOverlays.length) return;
+    stickerOverlays.forEach(overlay => {
+        let img = stickerCache.get(overlay.src);
+        if (!img) {
+            img = new Image();
+            img.src = 'public/stickers/' + overlay.src;
+            stickerCache.set(overlay.src, img);
+            img.onload = () => {
+                if (cameraActive && !capturedImage && !previewMode) {
+                    startLiveRender();
+                } else {
+                    drawPreview();
+                }
+            };
+            return;
+        }
+        if (!img.complete) return;
+        const size = overlay.size || STICKER_DEFAULT_SIZE;
+        ctx.drawImage(img, overlay.x - size / 2, overlay.y - size / 2, size, size);
+    });
+};
+
+const drawEmojis = ctx => {
+    if (!emojiOverlays.length) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    emojiOverlays.forEach(item => {
+        ctx.font = `${item.size || 64}px 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif`;
+        ctx.shadowColor = 'rgba(0,0,0,0.25)';
+        ctx.shadowBlur = 15;
+        ctx.fillText(item.emoji, item.x, item.y);
+    });
+    ctx.restore();
+};
+
+const renderLiveFrame = () => {
+    if (!cameraActive || previewMode || !previewCanvas || !video) return;
+    const ctx = previewCanvas.getContext('2d');
+    ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    ctx.save();
+    ctx.filter = filterMap[currentFilter] || 'none';
+    ctx.drawImage(video, 0, 0, previewCanvas.width, previewCanvas.height);
+    ctx.restore();
+    drawStickers(ctx);
+    drawEmojis(ctx);
+    liveRenderId = requestAnimationFrame(renderLiveFrame);
+};
+
+const startLiveRender = () => {
+    stopLiveRender();
+    liveRenderId = requestAnimationFrame(renderLiveFrame);
+};
+
+const enterPreviewMode = () => {
+    previewMode = true;
+    if (captureBtn) captureBtn.textContent = 'Retake';
+    stopLiveRender();
+    updateViewportState();
+    setCameraStatus('Preview ready');
+};
+
+const exitPreviewMode = () => {
+    previewMode = false;
+    if (captureBtn) captureBtn.textContent = 'Capture Photo';
+    updateViewportState();
+    setCameraStatus(cameraActive ? 'Camera live' : 'Camera idle');
+    if (cameraActive) startLiveRender();
+};
+
+const clearCapturedImage = () => {
+    capturedImage = null;
+    baseImageEl = null;
+    if (imageDataInput) imageDataInput.value = '';
+    resetEmojiOverlays();
+    resetStickerOverlays();
+    if (saveBtn) saveBtn.disabled = true;
+    if (!cameraActive && captureBtn) captureBtn.disabled = true;
+    if (previewCanvas) {
+        const ctx = previewCanvas.getContext('2d');
+        ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
+    exitPreviewMode();
+};
+
 const handleImageFile = file => {
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = function(event) {
+    reader.onload = event => {
         const img = new Image();
         img.onload = function() {
             const context = canvas.getContext('2d');
             context.drawImage(img, 0, 0, 640, 480);
             capturedImage = canvas.toDataURL('image/png');
+            baseImageEl = img;
             resetEmojiOverlays();
+            resetStickerOverlays();
             drawPreview();
             saveBtn.disabled = false;
             captureBtn.disabled = false;
@@ -121,143 +242,24 @@ const handleImageFile = file => {
     reader.readAsDataURL(file);
 };
 
-const toggleUploadZone = isActive => {
-    if (uploadZone) {
-        uploadZone.classList[isActive ? 'add' : 'remove']('dragging');
-    }
-};
-
-const updateViewportState = () => {
-    if (capturedImage) {
-        if (previewCanvas) previewCanvas.classList.add('active');
-        if (video) video.classList.add('hidden');
-        if (viewportPlaceholder) viewportPlaceholder.classList.add('hidden');
-    } else if (cameraActive) {
-        if (previewCanvas) previewCanvas.classList.remove('active');
-        if (video) video.classList.remove('hidden');
-        if (viewportPlaceholder) viewportPlaceholder.classList.add('hidden');
-    } else {
-        if (previewCanvas) previewCanvas.classList.remove('active');
-        if (video) video.classList.add('hidden');
-        if (viewportPlaceholder) viewportPlaceholder.classList.remove('hidden');
-    }
-};
-
-const enterPreviewMode = () => {
-    previewMode = true;
-    if (captureBtn) {
-        captureBtn.textContent = 'Retake';
-    }
-    updateViewportState();
-    setCameraStatus('Preview ready');
-};
-
-const exitPreviewMode = () => {
-    previewMode = false;
-    if (captureBtn) {
-        captureBtn.textContent = 'Capture Photo';
-    }
-    updateViewportState();
-    setCameraStatus(cameraActive ? 'Camera live' : 'Camera idle');
-};
-
-const clearCapturedImage = () => {
-    capturedImage = null;
-    if (imageDataInput) {
-        imageDataInput.value = '';
-    }
-    resetEmojiOverlays();
-    if (saveBtn) {
-        saveBtn.disabled = true;
-    }
-    if (!cameraActive && captureBtn) {
-        captureBtn.disabled = true;
-    }
-    exitPreviewMode();
-};
-
-updateViewportState();
-setCameraStatus('Camera idle');
-
-if (tabButtons.length) {
-    tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            if (button.classList.contains('active')) return;
-            tabButtons.forEach(btn => btn.classList.remove('active'));
-            tabPanels.forEach(panel => panel.classList.remove('active'));
-            button.classList.add('active');
-            const tabName = button.getAttribute('data-tab');
-            activeTab = tabName;
-            const targetPanel = document.querySelector(`.tab-panel[data-panel="${tabName}"]`);
-            if (targetPanel) {
-                targetPanel.classList.add('active');
-            }
-            applyPickerFilters();
-        });
-    });
-}
-
-if (categoryChips.length) {
-    categoryChips.forEach(chip => {
-        chip.addEventListener('click', () => {
-            const parent = chip.closest('.picker-categories');
-            const picker = parent ? parent.dataset.picker : null;
-            if (!picker) return;
-            parent.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
-            if (picker === 'sticker') {
-                activeCategories.stickers = chip.dataset.category || 'all';
-            } else if (picker === 'emoji') {
-                activeCategories.emojis = chip.dataset.category || 'all';
-            }
-            applyPickerFilters();
-        });
-    });
-}
-
-if (pickerSearch) {
-    pickerSearch.addEventListener('input', () => applyPickerFilters());
-}
-applyPickerFilters();
-
-// Sticker selection
-if (stickerItems.length) {
-    stickerItems.forEach(sticker => {
-        sticker.addEventListener('click', function() {
-            stickerItems.forEach(s => s.classList.remove('active'));
-            this.classList.add('active');
-            selectedSticker = this.getAttribute('data-sticker');
-            
-            if (capturedImage) {
-                drawPreview();
-            }
-        });
-    });
-}
-
-// Start/stop camera toggle
-startCameraBtn.addEventListener('click', async function() {
-    if (cameraActive) {
-        stopCamera();
-        return;
-    }
-
+const startCamera = async () => {
     try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480 } 
-        });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        if (!video) return;
         video.srcObject = stream;
         captureBtn.disabled = false;
         cameraActive = true;
         startCameraBtn.textContent = 'Stop Camera';
         updateViewportState();
+        startLiveRender();
         setCameraStatus('Camera live');
     } catch (err) {
         alert('Error accessing camera: ' + err.message);
     }
-});
+};
 
-function stopCamera() {
+const stopCamera = () => {
+    stopLiveRender();
     if (stream) {
         stream.getTracks().forEach(track => track.stop());
         stream = null;
@@ -267,38 +269,95 @@ function stopCamera() {
     cameraActive = false;
     updateViewportState();
     setCameraStatus('Camera idle');
-}
+};
+
+// Initial UI state
+updateViewportState();
+setCameraStatus('Camera idle');
+
+// Tabs
+tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        if (button.classList.contains('active')) return;
+        tabButtons.forEach(btn => btn.classList.remove('active'));
+        tabPanels.forEach(panel => panel.classList.remove('active'));
+        button.classList.add('active');
+        const tabName = button.getAttribute('data-tab');
+        activeTab = tabName;
+        const targetPanel = document.querySelector(`.tab-panel[data-panel="${tabName}"]`);
+        if (targetPanel) targetPanel.classList.add('active');
+        if (tabName === 'emojis') {
+            clearStickerSelection();
+        } else if (tabName === 'stickers') {
+            clearEmojiSelection();
+        }
+        applyPickerFilters();
+    });
+});
+
+// Category chips
+categoryChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+        const parent = chip.closest('.picker-categories');
+        const picker = parent ? parent.dataset.picker : null;
+        if (!picker) return;
+        parent.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        if (picker === 'sticker') activeCategories.stickers = chip.dataset.category || 'all';
+        if (picker === 'emoji') activeCategories.emojis = chip.dataset.category || 'all';
+        applyPickerFilters();
+    });
+});
+
+if (pickerSearch) pickerSearch.addEventListener('input', applyPickerFilters);
+applyPickerFilters();
+
+// Sticker selection
+stickerItems.forEach(sticker => {
+    sticker.addEventListener('click', function() {
+        stickerItems.forEach(s => s.classList.remove('active'));
+        this.classList.add('active');
+        selectedSticker = this.getAttribute('data-sticker');
+        clearEmojiSelection();
+        if (capturedImage) drawPreview();
+    });
+});
+
+// Start/stop camera
+startCameraBtn?.addEventListener('click', () => {
+    if (cameraActive) {
+        stopCamera();
+    } else {
+        startCamera();
+    }
+});
 
 // Capture photo
-captureBtn.addEventListener('click', function() {
+captureBtn?.addEventListener('click', () => {
     if (previewMode) {
         clearCapturedImage();
         return;
     }
-
-    let context = canvas.getContext('2d');
+    if (!video) return;
+    const context = canvas.getContext('2d');
     context.drawImage(video, 0, 0, 640, 480);
     capturedImage = canvas.toDataURL('image/png');
+    baseImageEl = null;
     resetEmojiOverlays();
+    resetStickerOverlays();
     drawPreview();
     saveBtn.disabled = false;
     enterPreviewMode();
 });
 
 // Upload photo
-uploadBtn.addEventListener('click', function() {
-    if (fileInput) {
-        fileInput.click();
-    }
+uploadBtn?.addEventListener('click', () => fileInput && fileInput.click());
+fileInput?.addEventListener('change', e => {
+    handleImageFile(e.target.files[0]);
+    e.target.value = '';
 });
 
-if (fileInput) {
-    fileInput.addEventListener('change', function(e) {
-        handleImageFile(e.target.files[0]);
-        e.target.value = '';
-    });
-}
-
+// Drag/drop upload
 if (uploadZone) {
     ['dragenter', 'dragover'].forEach(eventName => {
         uploadZone.addEventListener(eventName, event => {
@@ -306,7 +365,6 @@ if (uploadZone) {
             toggleUploadZone(true);
         });
     });
-
     ['dragleave', 'drop'].forEach(eventName => {
         uploadZone.addEventListener(eventName, event => {
             event.preventDefault();
@@ -321,127 +379,210 @@ if (uploadZone) {
 }
 
 // Filter selection
-if (filterButtons.length) {
-    filterButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            filterButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-            currentFilter = button.getAttribute('data-filter');
+filterButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        filterButtons.forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        currentFilter = button.getAttribute('data-filter');
+        if (cameraActive && !previewMode) {
+            startLiveRender();
+        } else {
             drawPreview();
-        });
+        }
     });
-}
+});
 
-// Emoji selection & placement
-if (emojiButtons.length) {
-    emojiButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            if (button.classList.contains('active')) {
-                button.classList.remove('active');
-                selectedEmoji = null;
-                return;
+// Emoji selection
+emojiButtons.forEach(button => {
+    button.addEventListener('click', () => {
+        if (button.classList.contains('active')) {
+            button.classList.remove('active');
+            selectedEmoji = null;
+            return;
+        }
+        emojiButtons.forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        selectedEmoji = button.getAttribute('data-emoji');
+        clearStickerSelection();
+    });
+});
+
+emojiSizeInput?.addEventListener('input', updateSizeBubble);
+updateSizeBubble();
+
+clearEmojisBtn?.addEventListener('click', () => {
+    clearCapturedImage();
+});
+
+removeEmojiBtn?.addEventListener('click', () => {
+    emojiOverlays.pop();
+    renderCurrent();
+});
+
+removeStickerBtn?.addEventListener('click', () => {
+    stickerOverlays.pop();
+    renderCurrent();
+});
+
+const renderCurrent = () => {
+    if (cameraActive && !previewMode) {
+        startLiveRender();
+        return;
+    }
+    drawPreview();
+};
+
+const hitTestEmoji = (x, y) => {
+    for (let i = emojiOverlays.length - 1; i >= 0; i--) {
+        const item = emojiOverlays[i];
+        const size = item.size || 64;
+        const radius = size / 2;
+        const dx = x - item.x;
+        const dy = y - item.y;
+        if (dx * dx + dy * dy <= radius * radius) {
+            return i;
+        }
+    }
+    return -1;
+};
+
+const hitTestSticker = (x, y) => {
+    for (let i = stickerOverlays.length - 1; i >= 0; i--) {
+        const item = stickerOverlays[i];
+        const size = item.size || STICKER_DEFAULT_SIZE;
+        const half = size / 2;
+        if (x >= item.x - half && x <= item.x + half && y >= item.y - half && y <= item.y + half) {
+            return i;
+        }
+    }
+    return -1;
+};
+
+// Overlay placement and emoji resizing (live or preview)
+previewCanvas?.addEventListener('mousedown', event => {
+    if (!cameraActive && !capturedImage) return;
+    const rect = previewCanvas.getBoundingClientRect();
+    const scaleX = previewCanvas.width / rect.width;
+    const scaleY = previewCanvas.height / rect.height;
+    const x = (event.clientX - rect.left) * scaleX;
+    const y = (event.clientY - rect.top) * scaleY;
+
+    // Drag stickers first (move only)
+    const stickerIndex = hitTestSticker(x, y);
+    if (stickerIndex !== -1) {
+        const moveHandler = moveEvent => {
+            const mx = (moveEvent.clientX - rect.left) * scaleX;
+            const my = (moveEvent.clientY - rect.top) * scaleY;
+            stickerOverlays[stickerIndex].x = mx;
+            stickerOverlays[stickerIndex].y = my;
+            renderCurrent();
+        };
+        const upHandler = () => {
+            window.removeEventListener('mousemove', moveHandler);
+            window.removeEventListener('mouseup', upHandler);
+        };
+        window.addEventListener('mousemove', moveHandler);
+        window.addEventListener('mouseup', upHandler);
+        return;
+    }
+
+    // Drag/move existing emoji; hold Shift to resize while dragging
+    const hitIndex = hitTestEmoji(x, y);
+    if (hitIndex !== -1) {
+        const target = emojiOverlays[hitIndex];
+        const start = { x, y, size: target.size || 64 };
+        const isResize = event.shiftKey;
+        const moveHandler = moveEvent => {
+            const mx = (moveEvent.clientX - rect.left) * scaleX;
+            const my = (moveEvent.clientY - rect.top) * scaleY;
+            if (isResize) {
+                const delta = start.y - my;
+                const newSize = Math.min(Math.max(start.size + delta, MIN_EMOJI_SIZE), MAX_EMOJI_SIZE);
+                emojiOverlays[hitIndex].size = newSize;
+                if (emojiSizeInput) {
+                    emojiSizeInput.value = newSize;
+                    updateSizeBubble();
+                }
+            } else {
+                emojiOverlays[hitIndex].x = mx;
+                emojiOverlays[hitIndex].y = my;
             }
-            emojiButtons.forEach(btn => btn.classList.remove('active'));
-            button.classList.add('active');
-            selectedEmoji = button.getAttribute('data-emoji');
-        });
-    });
-}
+            renderCurrent();
+        };
+        const upHandler = () => {
+            window.removeEventListener('mousemove', moveHandler);
+            window.removeEventListener('mouseup', upHandler);
+        };
+        window.addEventListener('mousemove', moveHandler);
+        window.addEventListener('mouseup', upHandler);
+        return;
+    }
 
-if (emojiSizeInput) {
-    emojiSizeInput.addEventListener('input', updateSizeBubble);
-    updateSizeBubble();
-}
-
-if (clearEmojisBtn) {
-    clearEmojisBtn.addEventListener('click', () => {
-        resetEmojiOverlays();
-        drawPreview();
-    });
-}
-
-if (previewCanvas) {
-    previewCanvas.addEventListener('click', event => {
-        if (!selectedEmoji || !capturedImage) return;
-        const rect = previewCanvas.getBoundingClientRect();
-        const scaleX = previewCanvas.width / rect.width;
-        const scaleY = previewCanvas.height / rect.height;
-        const x = (event.clientX - rect.left) * scaleX;
-        const y = (event.clientY - rect.top) * scaleY;
+    // Place new overlay (only one type at a time based on active selection)
+    if (!selectedEmoji && !selectedSticker) return;
+    if (selectedEmoji) {
         emojiOverlays.push({
             emoji: selectedEmoji,
             x,
             y,
             size: parseInt(emojiSizeInput ? emojiSizeInput.value : 64, 10)
         });
-        drawPreview();
-    });
-}
+    } else if (selectedSticker) {
+        stickerOverlays.push({
+            src: selectedSticker,
+            x,
+            y,
+            size: STICKER_DEFAULT_SIZE
+        });
+    }
+    renderCurrent();
+});
 
-// Draw preview with edits
+// Draw preview with current captured image + overlays
 function drawPreview() {
-    if (!capturedImage) return;
-
+    if (!capturedImage || !previewCanvas) return Promise.resolve();
     const context = previewCanvas.getContext('2d');
-    const img = new Image();
+    const renderImage = baseImageEl
+        ? Promise.resolve(baseImageEl)
+        : new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => {
+                baseImageEl = img;
+                resolve(img);
+            };
+            img.src = capturedImage;
+        });
 
-    img.onload = function() {
+    return renderImage.then(img => new Promise(resolve => {
         context.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
         context.save();
         context.filter = filterMap[currentFilter] || 'none';
         context.drawImage(img, 0, 0, previewCanvas.width, previewCanvas.height);
         context.restore();
 
-    const finalize = () => {
-        drawEmojis(context);
-        if (imageDataInput) {
-            imageDataInput.value = previewCanvas.toDataURL('image/png');
-        }
-        updateViewportState();
-    };
+        const finalize = () => {
+            drawStickers(context);
+            drawEmojis(context);
+            if (imageDataInput) imageDataInput.value = previewCanvas.toDataURL('image/png');
+            updateViewportState();
+            resolve();
+        };
 
-        if (selectedSticker) {
-            const stickerImg = new Image();
-            stickerImg.onload = function() {
-                const stickerWidth = 150;
-                const stickerHeight = 150;
-                const x = (previewCanvas.width - stickerWidth) / 2;
-                const y = (previewCanvas.height - stickerHeight) / 2;
-                context.drawImage(stickerImg, x, y, stickerWidth, stickerHeight);
-                finalize();
-            };
-            stickerImg.src = 'public/stickers/' + selectedSticker;
-        } else {
-            finalize();
-        }
-    };
-
-    img.src = capturedImage;
-}
-
-function drawEmojis(context) {
-    if (!emojiOverlays.length) return;
-
-    context.save();
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    emojiOverlays.forEach(item => {
-        context.font = `${item.size || 64}px 'Noto Color Emoji', 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif`;
-        context.shadowColor = 'rgba(0,0,0,0.25)';
-        context.shadowBlur = 15;
-        context.fillText(item.emoji, item.x, item.y);
-    });
-    context.restore();
+        finalize();
+    }));
 }
 
 // Save form
 const saveForm = document.getElementById('saveForm');
 if (saveForm) {
-    saveForm.addEventListener('submit', function(e) {
+    saveForm.addEventListener('submit', async function(e) {
         if (!capturedImage) {
             e.preventDefault();
             alert('Please capture or upload an image first!');
             return false;
         }
+        e.preventDefault();
+        await drawPreview();
+        saveForm.submit();
     });
 }

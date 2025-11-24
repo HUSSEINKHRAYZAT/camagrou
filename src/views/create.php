@@ -78,7 +78,9 @@ include 'header.php';
                     <?php $stickers = [
                         ['file' => 'sticker1.png', 'label' => 'Star Burst', 'category' => 'fun'],
                         ['file' => 'sticker2.png', 'label' => 'Retro Cam', 'category' => 'retro'],
-                        ['file' => 'sticker3.png', 'label' => 'Cherry Pop', 'category' => 'fun']
+                        ['file' => 'sticker3.png', 'label' => 'Cherry Pop', 'category' => 'fun'],
+                        ['file' => 'sticker4.svg', 'label' => 'Sunset', 'category' => 'fun'],
+                        ['file' => 'sticker5.svg', 'label' => 'Soft Blob', 'category' => 'retro']
                     ]; ?>
                     <?php foreach ($stickers as $sticker): ?>
                         <button type="button" class="picker-card sticker" 
@@ -89,6 +91,9 @@ include 'header.php';
                             <span><?php echo htmlspecialchars($sticker['label']); ?></span>
                         </button>
                     <?php endforeach; ?>
+                </div>
+                <div class="emoji-actions__buttons">
+                    <button type="button" class="btn btn-outline btn-small" id="removeSticker">Remove Sticker</button>
                 </div>
             </div>
 
@@ -129,7 +134,10 @@ include 'header.php';
                             <span id="emojiSizeBubble" class="slider-bubble">72px</span>
                         </div>
                     </label>
-                    <button type="button" class="btn btn-outline btn-small" id="clearEmojis">Clear Emojis</button>
+                    <div class="emoji-actions__buttons">
+                        <button type="button" class="btn btn-outline btn-small" id="removeEmoji">Remove Emoji</button>
+                        <button type="button" class="btn btn-outline btn-small" id="clearEmojis">Clear Photo</button>
+                    </div>
                 </div>
             </div>
 
