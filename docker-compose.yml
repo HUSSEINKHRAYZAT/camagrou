@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # MySQL Database Service
+  db:
+    image: mysql:8.0
+    container_name: camagru-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: camagru
+      MYSQL_USER: camagru_user
+      MYSQL_PASSWORD: camagru_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./setup.php:/docker-entrypoint-initdb.d/setup.php
+    networks:
+      - camagru-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PHP Apache Web Service (Frontend + Backend)
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: camagru-web
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      # Only mount uploads directory, not the entire application
+      # This avoids permission issues with bind mounts on certain filesystems
+      - uploads_data:/var/www/html/public/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - camagru-network
+    environment:
+      - DB_HOST=db
+      - DB_NAME=camagru
+      - DB_USER=camagru_user
+      - DB_PASS=camagru_pass
+
+  # PHPMyAdmin Service (Optional - for database management)
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: camagru-phpmyadmin
+    restart: always
+    ports:
+      - "8081:80"
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: camagru_user
+      PMA_PASSWORD: camagru_pass
+    depends_on:
+      - db
+    networks:
+      - camagru-network
+
+networks:
+  camagru-network:
+    driver: bridge
+
+volumes:
+  db_data:
+    driver: local
+  uploads_data:
+    driver: local

@@ -120,7 +120,7 @@ class User {
 
     public function getActiveStory($userId) {
         $stmt = $this->pdo->prepare("
-            SELECT filename AS story_path, expires_at 
+            SELECT image_path AS story_path, expires_at 
             FROM stories 
             WHERE user_id = ? AND expires_at > NOW()
             ORDER BY created_at DESC

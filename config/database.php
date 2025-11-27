@@ -1,10 +1,11 @@
 <?php
 
 // Database configuration
-define('DB_HOST', '127.0.0.1');
-define('DB_NAME', 'camagru');
-define('DB_USER', 'camagru_user');
-define('DB_PASS', 'camagru_pass');
+// Check if running in Docker (use environment variables)
+define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
+define('DB_NAME', getenv('DB_NAME') ?: 'camagru');
+define('DB_USER', getenv('DB_USER') ?: 'camagru_user');
+define('DB_PASS', getenv('DB_PASS') ?: 'camagru_pass');
 define('DB_CHARSET', 'utf8mb4');
 
 // Database connection
