@@ -22,10 +22,22 @@ class User {
             return false;
         }
     }
+
+    public function findByUsername($username) {
+        $stmt = $this->pdo->prepare("SELECT * FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        return $stmt->fetch();
+    }
     
     public function findByEmail($email) {
         $stmt = $this->pdo->prepare("SELECT * FROM users WHERE email = ?");
         $stmt->execute([$email]);
+        return $stmt->fetch();
+    }
+
+    public function findByIdentifier($identifier) {
+        $stmt = $this->pdo->prepare("SELECT * FROM users WHERE email = ? OR username = ?");
+        $stmt->execute([$identifier, $identifier]);
         return $stmt->fetch();
     }
     
@@ -40,6 +52,23 @@ class User {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ");
+    }
+
+    private function ensureStoriesTable() {
+        $this->pdo->exec("
+            CREATE TABLE IF NOT EXISTS stories (
+                id INT PRIMARY KEY AUTO_INCREMENT,
+                user_id INT NOT NULL,
+                media_type ENUM('image','video') DEFAULT 'image',
+                filename VARCHAR(255) NOT NULL,
+                caption TEXT DEFAULT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                INDEX idx_user_id (user_id),
+                INDEX idx_expires_at (expires_at)
             )
         ");
     }
@@ -81,37 +110,118 @@ class User {
         return $stmt->execute([$userId, $bio, $avatarPath]);
     }
 
+    private function ensureFriendshipTables() {
+        // Keep schema small here to avoid depending on Friendship model instantiation
+        $this->pdo->exec("
+            CREATE TABLE IF NOT EXISTS friend_requests (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                sender_id INT NOT NULL,
+                receiver_id INT NOT NULL,
+                status ENUM('pending','accepted','rejected') DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_request (sender_id, receiver_id),
+                FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (receiver_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ");
+        $this->pdo->exec("
+            CREATE TABLE IF NOT EXISTS friendships (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                friend_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_friend (user_id, friend_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (friend_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ");
+    }
+
+    public function updateAccount($userId, $username, $email, $newPassword = null) {
+        $params = [$username, $email];
+        $passwordSql = "";
+        if (!empty($newPassword)) {
+            $passwordSql = ", password = ?";
+            $params[] = password_hash($newPassword, PASSWORD_DEFAULT);
+        }
+        $params[] = $userId;
+
+        $stmt = $this->pdo->prepare("
+            UPDATE users SET username = ?, email = ? $passwordSql
+            WHERE id = ?
+        ");
+        return $stmt->execute($params);
+    }
+
+    private function ensureResetTable() {
+        $this->pdo->exec("
+            CREATE TABLE IF NOT EXISTS password_resets (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                token VARCHAR(255) NOT NULL,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_token (token),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ");
+    }
+
+    public function createResetToken($email) {
+        $this->ensureResetTable();
+        $user = $this->findByEmail($email);
+        if (!$user) {
+            return null;
+        }
+        $token = bin2hex(random_bytes(32));
+        $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
+        $stmt = $this->pdo->prepare("
+            INSERT INTO password_resets (user_id, token, expires_at) VALUES (?, ?, ?)
+        ");
+        $stmt->execute([$user['id'], $token, $expires]);
+        return $token;
+    }
+
+    public function validateResetToken($token) {
+        $this->ensureResetTable();
+        $stmt = $this->pdo->prepare("
+            SELECT pr.user_id, u.email
+            FROM password_resets pr
+            JOIN users u ON pr.user_id = u.id
+            WHERE pr.token = ? AND pr.expires_at > NOW()
+        ");
+        $stmt->execute([$token]);
+        return $stmt->fetch();
+    }
+
+    public function updatePasswordById($userId, $newPassword) {
+        $stmt = $this->pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        return $stmt->execute([password_hash($newPassword, PASSWORD_DEFAULT), $userId]);
+    }
+
     public function findSuggestions($currentUserId, $limit = 6) {
         $this->ensureProfileTable();
+        $this->ensureFriendshipTables();
         $stmt = $this->pdo->prepare("
             SELECT u.id, u.username, up.profile_picture AS avatar, up.bio
             FROM users u
             LEFT JOIN user_profiles up ON up.user_id = u.id
-            WHERE u.id != ?
+            WHERE u.id != :current
+              AND u.id NOT IN (SELECT friend_id FROM friendships WHERE user_id = :current)
+              AND u.id NOT IN (SELECT user_id FROM friendships WHERE friend_id = :current)
+              AND u.id NOT IN (SELECT receiver_id FROM friend_requests WHERE sender_id = :current AND status = 'pending')
+              AND u.id NOT IN (SELECT sender_id FROM friend_requests WHERE receiver_id = :current AND status = 'pending')
             ORDER BY u.created_at DESC
-            LIMIT ?
+            LIMIT :limit
         ");
-        $stmt->bindValue(1, $currentUserId, PDO::PARAM_INT);
-        $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':current', $currentUserId, PDO::PARAM_INT);
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
 
     public function updateStory($userId, $storyPath, $expiresAt) {
-        $this->pdo->exec("
-            CREATE TABLE IF NOT EXISTS stories (
-                id INT PRIMARY KEY AUTO_INCREMENT,
-                user_id INT NOT NULL,
-                media_type ENUM('image','video') DEFAULT 'image',
-                filename VARCHAR(255) NOT NULL,
-                caption TEXT DEFAULT NULL,
-                expires_at TIMESTAMP NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                INDEX idx_user_id (user_id),
-                INDEX idx_expires_at (expires_at)
-            )
-        ");
+        $this->ensureStoriesTable();
         $stmt = $this->pdo->prepare("
             INSERT INTO stories (user_id, filename, expires_at) VALUES (?, ?, ?)
         ");
@@ -119,8 +229,9 @@ class User {
     }
 
     public function getActiveStory($userId) {
+        $this->ensureStoriesTable();
         $stmt = $this->pdo->prepare("
-            SELECT image_path AS story_path, expires_at 
+            SELECT filename AS story_path, expires_at 
             FROM stories 
             WHERE user_id = ? AND expires_at > NOW()
             ORDER BY created_at DESC

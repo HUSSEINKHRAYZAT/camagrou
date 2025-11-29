@@ -165,6 +165,33 @@ class Friendship {
         $stmt->execute([$userId1, $userId2, $userId2, $userId1]);
         return $stmt->fetch()['count'] > 0;
     }
+
+    /**
+     * Determine relationship status between two users.
+     * Returns array: ['status' => 'friends'|'outgoing_pending'|'incoming_pending'|'none', 'request_id' => int|null]
+     */
+    public function getRelationship($currentUserId, $otherUserId) {
+        if ($this->areFriends($currentUserId, $otherUserId)) {
+            return ['status' => 'friends', 'request_id' => null];
+        }
+
+        $stmt = $this->pdo->prepare("
+            SELECT id, status, sender_id, receiver_id 
+            FROM friend_requests 
+            WHERE (sender_id = ? AND receiver_id = ?) 
+               OR (sender_id = ? AND receiver_id = ?)
+            LIMIT 1
+        ");
+        $stmt->execute([$currentUserId, $otherUserId, $otherUserId, $currentUserId]);
+        $req = $stmt->fetch();
+
+        if ($req && $req['status'] === 'pending') {
+            $direction = $req['sender_id'] == $currentUserId ? 'outgoing_pending' : 'incoming_pending';
+            return ['status' => $direction, 'request_id' => (int)$req['id']];
+        }
+
+        return ['status' => 'none', 'request_id' => null];
+    }
     
     /**
      * Get user's friends

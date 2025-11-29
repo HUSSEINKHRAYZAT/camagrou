@@ -27,8 +27,11 @@ class AuthController {
                 $errors[] = "Invalid email address.";
             }
             
-            if (strlen($password) < 8) {
-                $errors[] = "Password must be at least 8 characters long.";
+            $hasUpper = preg_match('/[A-Z]/', $password);
+            $hasLower = preg_match('/[a-z]/', $password);
+            $hasNum = preg_match('/[0-9]/', $password);
+            if (strlen($password) < 8 || !$hasUpper || !$hasLower || !$hasNum) {
+                $errors[] = "Password must be at least 8 chars and include upper, lower and number.";
             }
             
             if ($password !== $confirmPassword) {
@@ -58,10 +61,10 @@ class AuthController {
     
     public function login() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $email = trim($_POST['email'] ?? '');
+            $identifier = trim($_POST['identifier'] ?? '');
             $password = $_POST['password'] ?? '';
             
-            $user = $this->userModel->findByEmail($email);
+            $user = $this->userModel->findByIdentifier($identifier);
             
             if ($user && password_verify($password, $user['password'])) {
                 if (!$user['verified']) {
@@ -73,11 +76,61 @@ class AuthController {
                     exit;
                 }
             } else {
-                $_SESSION['errors'] = ["Invalid email or password."];
+                $_SESSION['errors'] = ["Invalid username/email or password."];
             }
         }
         
         require_once 'src/views/login.php';
+    }
+
+    public function forgotPassword() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email = trim($_POST['email'] ?? '');
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $_SESSION['errors'] = ["Enter a valid email."];
+            } else {
+                $token = $this->userModel->createResetToken($email);
+                if ($token) {
+                    $resetUrl = BASE_URL . "/index.php?page=reset_password&token=" . $token;
+                    $subject = "Reset your Camagru password";
+                    $message = "Click to reset your password:\n\n" . $resetUrl;
+                    mail($email, $subject, $message, "From: " . SMTP_FROM);
+                }
+                $_SESSION['success'] = "If the email exists, a reset link was sent.";
+                header('Location: index.php?page=login');
+                exit;
+            }
+        }
+        require_once 'src/views/forgot_password.php';
+    }
+
+    public function resetPassword() {
+        $token = $_GET['token'] ?? ($_POST['token'] ?? '');
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $password = $_POST['password'] ?? '';
+            $confirm = $_POST['confirm_password'] ?? '';
+            if ($password !== $confirm) {
+                $_SESSION['errors'] = ["Passwords do not match."];
+            } else {
+                $check = $this->userModel->validateResetToken($token);
+                if ($check) {
+                    $hasUpper = preg_match('/[A-Z]/', $password);
+                    $hasLower = preg_match('/[a-z]/', $password);
+                    $hasNum = preg_match('/[0-9]/', $password);
+                    if (strlen($password) < 8 || !$hasUpper || !$hasLower || !$hasNum) {
+                        $_SESSION['errors'] = ["Password must be at least 8 chars and include upper, lower and number."]; 
+                    } else {
+                        $this->userModel->updatePasswordById($check['user_id'], $password);
+                        $_SESSION['success'] = "Password updated. Please login.";
+                        header('Location: index.php?page=login');
+                        exit;
+                    }
+                } else {
+                    $_SESSION['errors'] = ["Invalid or expired reset link."];
+                }
+            }
+        }
+        require_once 'src/views/reset_password.php';
     }
     
     public function logout() {

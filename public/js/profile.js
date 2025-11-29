@@ -19,6 +19,8 @@
     const addStoryLabel = document.getElementById('addStoryLabel');
     const storyViewer = document.getElementById('storyViewer');
     const storyViewerImg = document.getElementById('storyViewerImg');
+    const storyProgressBar = document.getElementById('storyProgressBar');
+    const STORY_DURATION = 7000;
 
     if (!modal || !openBtn || !bioInput || !bioDisplay) return;
 
@@ -104,16 +106,27 @@
         storyForm.submit();
     });
 
+    const startStoryTimer = () => {
+        if (!storyProgressBar) return;
+        storyProgressBar.style.transition = 'none';
+        storyProgressBar.style.width = '0%';
+        requestAnimationFrame(() => {
+            storyProgressBar.style.transition = `width ${STORY_DURATION}ms linear`;
+            storyProgressBar.style.width = '100%';
+        });
+    };
+
     storyActiveRing?.addEventListener('click', () => {
         const src = storyActiveRing.dataset.story;
         if (!src || !storyViewer || !storyViewerImg) return;
         storyViewerImg.src = src;
         storyViewer.setAttribute('aria-hidden', 'false');
         storyViewer.classList.add('open');
+        startStoryTimer();
         setTimeout(() => {
             storyViewer.classList.remove('open');
             storyViewer.setAttribute('aria-hidden', 'true');
-        }, 5000);
+        }, STORY_DURATION);
     });
 
     storyViewer?.addEventListener('click', () => {

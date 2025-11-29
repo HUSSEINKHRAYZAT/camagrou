@@ -2,6 +2,7 @@
 $title = 'Profile - Camagru';
 include 'header.php'; 
 $isOwnProfile = ($user['id'] == $_SESSION['user_id']);
+$relationship = $relationship ?? ['status' => 'none'];
 $postCount = count($images);
 $friendCount = $friendCount ?? ($user['friend_count'] ?? 0);
 $bio = $user['bio'] ?? 'Add a short bio to tell the world about you.';
@@ -11,6 +12,7 @@ $avatarSrc = $user['avatar'] ?? '';
 $suggestions = $suggestions ?? [];
 $pendingRequests = $pendingRequests ?? [];
 $activeStory = $activeStory ?? null;
+$canViewStory = $isOwnProfile || (($relationship['status'] ?? '') === 'friends');
 ?>
 
 <section class="profile-hero">
@@ -31,12 +33,28 @@ $activeStory = $activeStory ?? null;
                 <?php if ($isOwnProfile): ?>
                     <a href="index.php?page=create" class="btn btn-primary">Create</a>
                 <?php else: ?>
-                    <form method="POST" action="index.php?page=profile&user_id=<?php echo $user['id']; ?>" class="inline-form">
-                        <input type="hidden" name="action" value="send_friend_request">
-                        <input type="hidden" name="recipient_id" value="<?php echo $user['id']; ?>">
-                        <button type="submit" class="btn btn-primary">Add Friend</button>
-                    </form>
-                    <button type="button" class="btn btn-outline">Message</button>
+                    <?php if ($relationship['status'] === 'friends'): ?>
+                        <form method="POST" action="index.php?page=profile&user_id=<?php echo $user['id']; ?>" class="inline-form">
+                            <input type="hidden" name="action" value="unfriend">
+                            <input type="hidden" name="friend_id" value="<?php echo $user['id']; ?>">
+                            <button type="submit" class="btn btn-outline">Unfriend</button>
+                        </form>
+                    <?php elseif ($relationship['status'] === 'outgoing_pending'): ?>
+                        <button type="button" class="btn btn-outline" disabled>Request Sent</button>
+                    <?php elseif ($relationship['status'] === 'incoming_pending'): ?>
+                        <form method="POST" action="index.php?page=profile" class="inline-form">
+                            <input type="hidden" name="action" value="respond_friend_request">
+                            <input type="hidden" name="request_id" value="<?php echo $relationship['request_id'] ?? 0; ?>">
+                            <input type="hidden" name="decision" value="accept">
+                            <button type="submit" class="btn btn-primary">Accept Request</button>
+                        </form>
+                    <?php else: ?>
+                        <form method="POST" action="index.php?page=profile&user_id=<?php echo $user['id']; ?>" class="inline-form">
+                            <input type="hidden" name="action" value="send_friend_request">
+                            <input type="hidden" name="recipient_id" value="<?php echo $user['id']; ?>">
+                            <button type="submit" class="btn btn-primary">Add Friend</button>
+                        </form>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -154,20 +172,62 @@ $activeStory = $activeStory ?? null;
                 <input type="file" id="storyUpload" name="story_file" accept="image/*" style="display:none;">
             </form>
         <?php endif; ?>
-        <button type="button" class="story-ring story-ring--active <?php echo $activeStory ? 'has-story' : ''; ?>" id="storyActiveRing" data-story="<?php echo $activeStory ? htmlspecialchars($activeStory['story_path']) : ''; ?>" aria-hidden="<?php echo $activeStory ? 'false' : 'true'; ?>">
-            <span class="story-thumb" id="storyThumb" style="<?php echo $activeStory ? "background-image:url('".$activeStory['story_path']."');" : 'display:none;'; ?>"></span>
+        <button type="button" class="story-ring story-ring--active <?php echo ($activeStory && $canViewStory) ? 'has-story' : ''; ?>" id="storyActiveRing" data-story="<?php echo ($activeStory && $canViewStory) ? htmlspecialchars($activeStory['story_path']) : ''; ?>" aria-hidden="<?php echo ($activeStory && $canViewStory) ? 'false' : 'true'; ?>">
+            <span class="story-thumb" id="storyThumb" style="<?php echo ($activeStory && $canViewStory) ? \"background-image:url('\".$activeStory['story_path'].\"');\" : 'display:none;'; ?>"></span>
             <span class="story-dot"></span>
-            <small id="storyLabel"><?php echo $activeStory ? 'View Story' : 'No story yet'; ?></small>
+            <small id="storyLabel">
+                <?php 
+                if ($activeStory && $canViewStory) {
+                    echo 'View Story';
+                } elseif ($activeStory) {
+                    echo 'Stories are only visible to friends.';
+                } else {
+                    echo 'No story yet';
+                }
+                ?>
+            </small>
         </button>
         <p class="story-empty">Stories last 24 hours.</p>
     </div>
     <div class="story-viewer" id="storyViewer" aria-hidden="true">
         <div class="story-viewer__backdrop"></div>
         <div class="story-viewer__content">
+            <div class="story-progress"><div class="story-progress__bar" id="storyProgressBar"></div></div>
             <img id="storyViewerImg" alt="Story">
         </div>
     </div>
 </section>
+
+<?php if (!$isOwnProfile && ($relationship['status'] ?? '') === 'friends'): ?>
+<section class="profile-messages">
+    <div class="profile-section-header">
+        <h3>Messages</h3>
+        <p class="page-subtitle">Chat with <?php echo htmlspecialchars($user['username']); ?></p>
+    </div>
+    <div class="messages-thread">
+        <?php if (empty($messages)): ?>
+            <p class="tool-hint">No messages yet. Say hello!</p>
+        <?php else: ?>
+            <?php foreach ($messages as $msg): 
+                $isMine = ($msg['sender_id'] == $_SESSION['user_id']);
+            ?>
+                <div class="message-row <?php echo $isMine ? 'message-row--mine' : 'message-row--theirs'; ?>">
+                    <div class="message-bubble">
+                        <p><?php echo nl2br(htmlspecialchars($msg['body'])); ?></p>
+                        <small><?php echo htmlspecialchars(date('M d, H:i', strtotime($msg['created_at']))); ?></small>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        <?php endif; ?>
+    </div>
+    <form method="POST" action="index.php?page=profile&user_id=<?php echo $user['id']; ?>" class="message-form">
+        <input type="hidden" name="action" value="send_message">
+        <input type="hidden" name="recipient_id" value="<?php echo $user['id']; ?>">
+        <textarea name="message_body" rows="2" placeholder="Type a message" required></textarea>
+        <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+</section>
+<?php endif; ?>
 
 <?php if ($isOwnProfile): ?>
     <div class="profile-settings">
@@ -181,6 +241,25 @@ $activeStory = $activeStory ?? null;
                 </label>
             </div>
             <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+    </div>
+    <div class="profile-settings">
+        <h3>Account</h3>
+        <form method="POST" action="index.php?page=profile">
+            <input type="hidden" name="action" value="update_account">
+            <div class="form-group">
+                <label for="new_username">Username</label>
+                <input type="text" id="new_username" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="new_email">Email</label>
+                <input type="email" id="new_email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="new_password">New password (optional)</label>
+                <input type="password" id="new_password" name="password" placeholder="Leave blank to keep current">
+            </div>
+            <button type="submit" class="btn btn-primary">Update Account</button>
         </form>
     </div>
     <?php if (!empty($pendingRequests)): ?>

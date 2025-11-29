@@ -1,1 +1,0 @@
-flatpak-spawn --host php -S localhost:8080

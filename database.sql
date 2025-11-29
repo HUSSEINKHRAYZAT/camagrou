@@ -25,6 +25,19 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- ========================================
+-- PASSWORD RESETS TABLE (for forgotten passwords)
+-- ========================================
+CREATE TABLE IF NOT EXISTS password_resets (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    token VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_token (token),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ========================================
 -- USER PROFILES TABLE (New)
 -- ========================================
 CREATE TABLE IF NOT EXISTS user_profiles (

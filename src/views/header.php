@@ -57,6 +57,11 @@
                         <small><?php echo htmlspecialchars($note['timestamp'] ?? ($note['created_at'] ?? '')); ?></small>
                     </div>
                 <?php endforeach; ?>
+                <?php if (isset($_SESSION['user_id'])): ?>
+                    <form method="POST" action="index.php?page=notifications-clear" class="notification-clear-form">
+                        <button type="submit" class="btn btn-outline btn-small">Clear</button>
+                    </form>
+                <?php endif; ?>
             </div>
         </div>
         <?php unset($_SESSION['notifications']); ?>

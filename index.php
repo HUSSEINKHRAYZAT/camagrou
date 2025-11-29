@@ -28,6 +28,18 @@ switch ($page) {
         $controller = new AuthController();
         $controller->login();
         break;
+    
+    case 'forgot_password':
+        require_once 'src/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->forgotPassword();
+        break;
+
+    case 'reset_password':
+        require_once 'src/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->resetPassword();
+        break;
         
     case 'logout':
         require_once 'src/controllers/AuthController.php';
@@ -59,6 +71,16 @@ switch ($page) {
         require_once 'src/controllers/UserController.php';
         $controller = new UserController();
         $controller->profile();
+        break;
+
+    case 'notifications-clear':
+        if (!$isLoggedIn) {
+            header('Location: index.php?page=login');
+            exit;
+        }
+        require_once 'src/controllers/NotificationController.php';
+        $controller = new NotificationController();
+        $controller->clearAll();
         break;
         
     default:
