@@ -1,12 +1,15 @@
 <?php
 
 require_once 'src/models/User.php';
+require_once 'src/services/EmailService.php';
 
 class AuthController {
     private $userModel;
+    private $emailService;
     
     public function __construct() {
         $this->userModel = new User();
+        $this->emailService = new EmailService();
     }
     
     public function register() {
@@ -39,14 +42,23 @@ class AuthController {
             }
             
             if (empty($errors)) {
-                $token = $this->userModel->create($username, $email, $password);
+                $otpCode = $this->userModel->create($username, $email, $password);
                 
-                if ($token) {
-                    // Send verification email
-                    $this->sendVerificationEmail($email, $token);
+                if ($otpCode) {
+                    // Send verification email with OTP
+                    $emailSent = $this->emailService->sendVerificationEmail($email, $username, $otpCode);
                     
-                    $_SESSION['success'] = "Registration successful! Please check your email to verify your account.";
-                    header('Location: index.php?page=login');
+                    // Store email in session for verification page
+                    $_SESSION['pending_verification_email'] = $email;
+                    $_SESSION['pending_otp_code'] = $otpCode; // Store for display if email fails
+                    
+                    if ($emailSent) {
+                        $_SESSION['success'] = "Registration successful! Please check your email for the 6-digit verification code.";
+                    } else {
+                        $_SESSION['warning'] = "Registration successful! Email could not be sent (SMTP not configured).<br><br>🔑 <strong>Your verification code is: <span style='font-size: 24px; color: #667eea; letter-spacing: 5px; font-family: monospace;'>" . $otpCode . "</span></strong><br><br>Enter this code on the next page to verify your account.<br><small>To enable email, run: <code>./setup_email.sh</code></small>";
+                    }
+                    
+                    header('Location: index.php?page=verify_otp');
                     exit;
                 } else {
                     $errors[] = "Username or email already exists.";
@@ -91,11 +103,12 @@ class AuthController {
             } else {
                 $token = $this->userModel->createResetToken($email);
                 if ($token) {
-                    $resetUrl = BASE_URL . "/index.php?page=reset_password&token=" . $token;
-                    $subject = "Reset your Camagru password";
-                    $message = "Click to reset your password:\n\n" . $resetUrl;
-                    mail($email, $subject, $message, "From: " . SMTP_FROM);
+                    $user = $this->userModel->findByEmail($email);
+                    if ($user) {
+                        $this->emailService->sendPasswordResetEmail($email, $user['username'], $token);
+                    }
                 }
+                // Always show success message (security best practice - don't reveal if email exists)
                 $_SESSION['success'] = "If the email exists, a reset link was sent.";
                 header('Location: index.php?page=login');
                 exit;
@@ -152,13 +165,59 @@ class AuthController {
         exit;
     }
     
-    private function sendVerificationEmail($email, $token) {
-        $verificationUrl = BASE_URL . "/index.php?page=verify&token=" . $token;
-        $subject = "Verify your Camagru account";
-        $message = "Click the following link to verify your account:\n\n" . $verificationUrl;
-        $headers = "From: " . SMTP_FROM;
+    public function verifyOTP() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email = trim($_POST['email'] ?? '');
+            $otpCode = trim($_POST['otp_code'] ?? '');
+            
+            if (empty($email) || empty($otpCode)) {
+                $_SESSION['errors'] = ["Please enter your email and verification code."];
+            } elseif (!preg_match('/^\d{6}$/', $otpCode)) {
+                $_SESSION['errors'] = ["Verification code must be 6 digits."];
+            } else {
+                if ($this->userModel->verifyOTP($email, $otpCode)) {
+                    unset($_SESSION['pending_verification_email']);
+                    $_SESSION['success'] = "Email verified successfully! You can now log in.";
+                    header('Location: index.php?page=login');
+                    exit;
+                } else {
+                    $_SESSION['errors'] = ["Invalid or expired verification code. Please try again or request a new code."];
+                }
+            }
+        }
         
-        // In production, use PHPMailer or similar library
-        mail($email, $subject, $message, $headers);
+        require_once 'src/views/verify_otp.php';
+    }
+    
+    public function resendOTP() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email = trim($_POST['email'] ?? '');
+            
+            if (empty($email)) {
+                $_SESSION['errors'] = ["Please enter your email address."];
+            } else {
+                $otpCode = $this->userModel->resendOTP($email);
+                
+                if ($otpCode) {
+                    $user = $this->userModel->findByEmail($email);
+                    if ($user) {
+                        $emailSent = $this->emailService->sendVerificationEmail($email, $user['username'], $otpCode);
+                        
+                        if ($emailSent) {
+                            $_SESSION['success'] = "A new verification code has been sent to your email.";
+                        } else {
+                            $_SESSION['success'] = "New code generated. Your OTP: " . $otpCode;
+                        }
+                    }
+                } else {
+                    $_SESSION['errors'] = ["No unverified account found with this email, or account is already verified."];
+                }
+            }
+            
+            header('Location: index.php?page=verify_otp');
+            exit;
+        }
+        
+        require_once 'src/views/verify_otp.php';
     }
 }

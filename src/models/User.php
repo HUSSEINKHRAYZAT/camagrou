@@ -9,15 +9,17 @@ class User {
     
     public function create($username, $email, $password) {
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
-        $verificationToken = bin2hex(random_bytes(32));
+        // Generate 6-digit OTP code
+        $otpCode = sprintf("%06d", mt_rand(0, 999999));
+        $otpExpiry = date('Y-m-d H:i:s', strtotime('+15 minutes')); // OTP expires in 15 minutes
         
         try {
             $stmt = $this->pdo->prepare("
-                INSERT INTO users (username, email, password, verification_token) 
-                VALUES (?, ?, ?, ?)
+                INSERT INTO users (username, email, password, verification_token, otp_expiry) 
+                VALUES (?, ?, ?, ?, ?)
             ");
-            $stmt->execute([$username, $email, $hashedPassword, $verificationToken]);
-            return $verificationToken;
+            $stmt->execute([$username, $email, $hashedPassword, $otpCode, $otpExpiry]);
+            return $otpCode;
         } catch (PDOException $e) {
             return false;
         }
@@ -92,6 +94,50 @@ class User {
         ");
         return $stmt->execute([$token]);
     }
+    
+    public function verifyOTP($email, $otpCode) {
+        // Check if OTP is valid and not expired
+        $stmt = $this->pdo->prepare("
+            SELECT id FROM users 
+            WHERE email = ? 
+            AND verification_token = ? 
+            AND otp_expiry > NOW()
+            AND verified = FALSE
+        ");
+        $stmt->execute([$email, $otpCode]);
+        $user = $stmt->fetch();
+        
+        if ($user) {
+            // Mark user as verified
+            $updateStmt = $this->pdo->prepare("
+                UPDATE users 
+                SET verified = TRUE, verification_token = NULL, otp_expiry = NULL 
+                WHERE id = ?
+            ");
+            return $updateStmt->execute([$user['id']]);
+        }
+        
+        return false;
+    }
+    
+    public function resendOTP($email) {
+        // Generate new 6-digit OTP
+        $otpCode = sprintf("%06d", mt_rand(0, 999999));
+        $otpExpiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+        
+        $stmt = $this->pdo->prepare("
+            UPDATE users 
+            SET verification_token = ?, otp_expiry = ? 
+            WHERE email = ? AND verified = FALSE
+        ");
+        
+        if ($stmt->execute([$otpCode, $otpExpiry, $email])) {
+            return $otpCode;
+        }
+        
+        return false;
+    }
+
     
     public function updateNotificationPreference($userId, $enabled) {
         $stmt = $this->pdo->prepare("

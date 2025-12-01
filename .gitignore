@@ -1,0 +1,20 @@
+# Environment variables (contains secrets!)
+.env
+
+# Composer
+/vendor/
+
+# Uploads
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

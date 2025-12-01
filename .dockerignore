@@ -2,6 +2,10 @@
 .git
 .gitignore
 
+# Composer
+vendor/
+composer.lock
+
 # Docker files
 docker-compose.yml
 Dockerfile

@@ -37,16 +37,12 @@ services:
       # Only mount uploads directory, not the entire application
       # This avoids permission issues with bind mounts on certain filesystems
       - uploads_data:/var/www/html/public/uploads
+      # Note: .env file is baked into the image during build for better permissions control
     depends_on:
       db:
         condition: service_healthy
     networks:
       - camagru-network
-    environment:
-      - DB_HOST=db
-      - DB_NAME=camagru
-      - DB_USER=camagru_user
-      - DB_PASS=camagru_pass
 
   # PHPMyAdmin Service (Optional - for database management)
   phpmyadmin:

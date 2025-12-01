@@ -1,11 +1,11 @@
 <?php
 
 // Database configuration
-// Check if running in Docker (use environment variables)
-define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
-define('DB_NAME', getenv('DB_NAME') ?: 'camagru');
-define('DB_USER', getenv('DB_USER') ?: 'camagru_user');
-define('DB_PASS', getenv('DB_PASS') ?: 'camagru_pass');
+// Use environment variables from .env file
+define('DB_HOST', $_ENV['DB_HOST'] ?? 'db');
+define('DB_NAME', $_ENV['DB_NAME'] ?? 'camagru');
+define('DB_USER', $_ENV['DB_USER'] ?? 'camagru_user');
+define('DB_PASS', $_ENV['DB_PASSWORD'] ?? 'camagru_pass');
 define('DB_CHARSET', 'utf8mb4');
 
 // Database connection

@@ -52,6 +52,18 @@ switch ($page) {
         $controller = new AuthController();
         $controller->verify();
         break;
+    
+    case 'verify_otp':
+        require_once 'src/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->verifyOTP();
+        break;
+    
+    case 'resend_otp':
+        require_once 'src/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->resendOTP();
+        break;
         
     case 'create':
         if (!$isLoggedIn) {
