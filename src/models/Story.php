@@ -171,9 +171,8 @@ class Story {
      */
     public function canView($storyId, $viewerId) {
         $stmt = $this->pdo->prepare("
-            SELECT s.user_id, p.is_private
+            SELECT s.user_id
             FROM stories s
-            JOIN user_profiles p ON s.user_id = p.user_id
             WHERE s.id = ? AND s.expires_at > NOW()
         ");
         $stmt->execute([$storyId]);
@@ -183,22 +182,7 @@ class Story {
             return false;
         }
         
-        // Own story
-        if ($story['user_id'] == $viewerId) {
-            return true;
-        }
-        
-        // Public profile or friends
-        if (!$story['is_private']) {
-            return true;
-        }
-        
-        // Check friendship
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*) as count FROM friendships 
-            WHERE user_id = ? AND friend_id = ?
-        ");
-        $stmt->execute([$story['user_id'], $viewerId]);
-        return $stmt->fetch()['count'] > 0;
+        // Anyone can view any story
+        return true;
     }
 }

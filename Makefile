@@ -57,7 +57,8 @@ help: ## Show this help message
 install: ## Setup: Install and setup everything (first time)
 	@echo "$(GREEN)🚀 Installing Camagru Docker Environment...$(NC)"
 	@chmod +x docker-setup.sh
-	@$(DOCKER_COMPOSE) up -d --build
+	@$(DOCKER_COMPOSE) build --no-cache
+	@$(DOCKER_COMPOSE) up -d
 	@echo "$(YELLOW)⏳ Waiting for MySQL to be ready...$(NC)"
 	@sleep 10
 	@./docker-setup.sh
@@ -76,6 +77,16 @@ build: ## Setup: Build/rebuild Docker images
 	@echo "$(YELLOW)🔨 Building Docker images...$(NC)"
 	@$(DOCKER_COMPOSE) build --no-cache
 	@echo "$(GREEN)✅ Build complete!$(NC)"
+
+.PHONY: rebuild
+rebuild: ## Setup: Rebuild and restart web service (no cache)
+	@echo "$(YELLOW)🔨 Rebuilding web service without cache...$(NC)"
+	@$(DOCKER_COMPOSE) build --no-cache web
+	@echo "$(GREEN)✅ Build complete! Restarting service...$(NC)"
+	@$(DOCKER_COMPOSE) up -d web
+	@sleep 2
+	@echo "$(GREEN)✅ Web service rebuilt and restarted!$(NC)"
+	@make status
 
 .PHONY: start
 start: up ## Start: Alias for 'up'

@@ -47,7 +47,7 @@ class Friendship {
             
             // Check if request already exists
             $stmt = $this->pdo->prepare("
-                SELECT id, status FROM friend_requests 
+                SELECT id, status, sender_id, receiver_id FROM friend_requests 
                 WHERE (sender_id = ? AND receiver_id = ?) 
                    OR (sender_id = ? AND receiver_id = ?)
             ");
@@ -56,8 +56,17 @@ class Friendship {
             
             if ($existing) {
                 if ($existing['status'] === 'pending') {
-                    return ['success' => false, 'message' => 'Request already sent'];
+                    // Check direction of pending request
+                    if ($existing['sender_id'] == $senderId) {
+                        return ['success' => false, 'message' => 'Request already sent'];
+                    } else {
+                        // They sent you a request, you should accept it instead
+                        return ['success' => false, 'message' => 'This user already sent you a request. Check your friend requests.'];
+                    }
                 }
+                // Delete old rejected/accepted request and create new one
+                $deleteStmt = $this->pdo->prepare("DELETE FROM friend_requests WHERE id = ?");
+                $deleteStmt->execute([$existing['id']]);
             }
             
             // Create new request
@@ -69,7 +78,15 @@ class Friendship {
             
             return ['success' => true, 'message' => 'Friend request sent'];
         } catch (PDOException $e) {
-            return ['success' => false, 'message' => 'Request already exists'];
+            // Log the actual error for debugging
+            error_log("Friend request error: " . $e->getMessage());
+            
+            // Check if it's a duplicate key error
+            if (strpos($e->getMessage(), 'Duplicate entry') !== false || strpos($e->getMessage(), 'uniq_request') !== false) {
+                return ['success' => false, 'message' => 'Request already pending'];
+            }
+            
+            return ['success' => false, 'message' => 'Unable to send friend request. Please try again.'];
         }
     }
     
@@ -142,6 +159,14 @@ class Friendship {
                 DELETE FROM friendships 
                 WHERE (user_id = ? AND friend_id = ?) 
                    OR (user_id = ? AND friend_id = ?)
+            ");
+            $stmt->execute([$userId, $friendId, $friendId, $userId]);
+            
+            // Delete the old friend request so they can send a new one
+            $stmt = $this->pdo->prepare("
+                DELETE FROM friend_requests 
+                WHERE (sender_id = ? AND receiver_id = ?) 
+                   OR (sender_id = ? AND receiver_id = ?)
             ");
             $stmt->execute([$userId, $friendId, $friendId, $userId]);
             
@@ -280,5 +305,34 @@ class Friendship {
         ");
         $stmt->execute([$userId, $userId, $userId, $userId, $userId, $userId]);
         return $stmt->fetchAll();
+    }
+    
+    /**
+     * Clean up inconsistent friend request data
+     * This removes accepted/rejected requests for users who are already friends
+     * or removes requests between users who are not friends but have accepted status
+     */
+    public function cleanupRequests($userId = null) {
+        try {
+            // Remove accepted requests where users are already friends
+            $this->pdo->exec("
+                DELETE fr FROM friend_requests fr
+                INNER JOIN friendships f 
+                ON (fr.sender_id = f.user_id AND fr.receiver_id = f.friend_id)
+                WHERE fr.status = 'accepted'
+            ");
+            
+            // Remove old rejected requests (older than 30 days)
+            $this->pdo->exec("
+                DELETE FROM friend_requests 
+                WHERE status = 'rejected' 
+                AND created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
+            ");
+            
+            return true;
+        } catch (PDOException $e) {
+            error_log("Cleanup error: " . $e->getMessage());
+            return false;
+        }
     }
 }

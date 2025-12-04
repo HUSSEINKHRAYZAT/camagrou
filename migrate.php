@@ -21,6 +21,26 @@ try {
     // Backup existing data
     echo "[1/14] Checking existing tables...\n";
     
+    // Enhance users table with OTP expiry column
+    echo "[1.5/14] Enhancing users table...\n";
+    try {
+        $pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expiry TIMESTAMP NULL AFTER verification_token");
+        echo "   ✓ Users table enhanced with OTP expiry\n";
+    } catch (PDOException $e) {
+        // Try without IF NOT EXISTS for older MySQL versions
+        try {
+            $stmt = $pdo->query("SHOW COLUMNS FROM users LIKE 'otp_expiry'");
+            if ($stmt->rowCount() == 0) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN otp_expiry TIMESTAMP NULL AFTER verification_token");
+                echo "   ✓ Users table enhanced with OTP expiry\n";
+            } else {
+                echo "   ℹ Users table already has OTP expiry column\n";
+            }
+        } catch (PDOException $e2) {
+            echo "   ℹ Could not enhance users table: " . $e2->getMessage() . "\n";
+        }
+    }
+    
     // Create user_profiles table
     echo "[2/14] Creating user_profiles table...\n";
     $pdo->exec("

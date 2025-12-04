@@ -20,6 +20,7 @@
     const storyViewer = document.getElementById('storyViewer');
     const storyViewerImg = document.getElementById('storyViewerImg');
     const storyProgressBar = document.getElementById('storyProgressBar');
+    const closeStoryViewer = document.getElementById('closeStoryViewer');
     const STORY_DURATION = 7000;
 
     if (!modal || !openBtn || !bioInput || !bioDisplay) return;
@@ -118,7 +119,13 @@
 
     storyActiveRing?.addEventListener('click', () => {
         const src = storyActiveRing.dataset.story;
-        if (!src || !storyViewer || !storyViewerImg) return;
+        console.log('Story clicked! Story source:', src);
+        console.log('Story viewer element:', storyViewer);
+        console.log('Story viewer img element:', storyViewerImg);
+        if (!src || !storyViewer || !storyViewerImg) {
+            console.log('Story viewer blocked - missing required elements or story source');
+            return;
+        }
         storyViewerImg.src = src;
         storyViewer.setAttribute('aria-hidden', 'false');
         storyViewer.classList.add('open');
@@ -132,5 +139,11 @@
     storyViewer?.addEventListener('click', () => {
         storyViewer.classList.remove('open');
         storyViewer.setAttribute('aria-hidden', 'true');
+    });
+
+    closeStoryViewer?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        storyViewer?.classList.remove('open');
+        storyViewer?.setAttribute('aria-hidden', 'true');
     });
 })();

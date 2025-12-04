@@ -9,8 +9,8 @@
 <body data-theme="light">
     <nav class="navbar">
         <div class="container nav-inner">
-            <a href="index.php?page=home" class="logo">
-                <img src="public/logo/logo.png" alt="Camagrou logo" class="logo-img">
+            <a href="index.php?page=home" class="logo logo-text">
+                <span class="logo-part-1">Camag</span><span class="logo-part-2">rou</span>
             </a>
             <div class="nav-controls">
                 <ul class="nav-links">
@@ -71,6 +71,12 @@
         <?php if (isset($_SESSION['success'])): ?>
             <div class="alert alert-success">
                 <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
+            </div>
+        <?php endif; ?>
+        
+        <?php if (isset($_SESSION['warning'])): ?>
+            <div class="alert alert-warning">
+                <?php echo $_SESSION['warning']; unset($_SESSION['warning']); ?>
             </div>
         <?php endif; ?>
         

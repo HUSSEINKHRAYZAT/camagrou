@@ -12,7 +12,7 @@ $avatarSrc = $user['avatar'] ?? '';
 $suggestions = $suggestions ?? [];
 $pendingRequests = $pendingRequests ?? [];
 $activeStory = $activeStory ?? null;
-$canViewStory = $isOwnProfile || (($relationship['status'] ?? '') === 'friends');
+$canViewStory = $canViewStory ?? false; // Use the value from controller
 ?>
 
 <section class="profile-hero">
@@ -147,11 +147,13 @@ $canViewStory = $isOwnProfile || (($relationship['status'] ?? '') === 'friends')
                 </div>
                 <div class="suggestion-actions">
                     <a class="btn btn-outline btn-small" href="index.php?page=profile&user_id=<?php echo $suggestion['id']; ?>">View</a>
+                    <?php if ($suggestion['id'] != $_SESSION['user_id']): ?>
                     <form method="POST" action="index.php?page=profile&user_id=<?php echo $suggestion['id']; ?>" class="inline-form">
                         <input type="hidden" name="action" value="send_friend_request">
                         <input type="hidden" name="recipient_id" value="<?php echo $suggestion['id']; ?>">
                         <button type="submit" class="btn btn-primary btn-small">Add Friend</button>
                     </form>
+                    <?php endif; ?>
                 </div>
             </div>
         <?php endforeach; ?>
@@ -172,15 +174,13 @@ $canViewStory = $isOwnProfile || (($relationship['status'] ?? '') === 'friends')
                 <input type="file" id="storyUpload" name="story_file" accept="image/*" style="display:none;">
             </form>
         <?php endif; ?>
-        <button type="button" class="story-ring story-ring--active <?php echo ($activeStory && $canViewStory) ? 'has-story' : ''; ?>" id="storyActiveRing" data-story="<?php echo ($activeStory && $canViewStory) ? htmlspecialchars($activeStory['story_path']) : ''; ?>" aria-hidden="<?php echo ($activeStory && $canViewStory) ? 'false' : 'true'; ?>">
-            <span class="story-thumb" id="storyThumb" style="<?php echo ($activeStory && $canViewStory) ? \"background-image:url('\".$activeStory['story_path'].\"');\" : 'display:none;'; ?>"></span>
+        <button type="button" class="story-ring story-ring--active <?php echo $activeStory ? 'has-story' : ''; ?>" id="storyActiveRing" data-story="<?php echo $activeStory ? htmlspecialchars($activeStory['story_path']) : ''; ?>" aria-hidden="<?php echo $activeStory ? 'false' : 'true'; ?>">
+            <span class="story-thumb" id="storyThumb" style="<?php echo $activeStory ? "background-image:url('".$activeStory['story_path']."');" : 'display:none;'; ?>"></span>
             <span class="story-dot"></span>
             <small id="storyLabel">
                 <?php 
-                if ($activeStory && $canViewStory) {
+                if ($activeStory) {
                     echo 'View Story';
-                } elseif ($activeStory) {
-                    echo 'Stories are only visible to friends.';
                 } else {
                     echo 'No story yet';
                 }
@@ -192,6 +192,7 @@ $canViewStory = $isOwnProfile || (($relationship['status'] ?? '') === 'friends')
     <div class="story-viewer" id="storyViewer" aria-hidden="true">
         <div class="story-viewer__backdrop"></div>
         <div class="story-viewer__content">
+            <button type="button" class="story-viewer__close" id="closeStoryViewer" aria-label="Close story">&times;</button>
             <div class="story-progress"><div class="story-progress__bar" id="storyProgressBar"></div></div>
             <img id="storyViewerImg" alt="Story">
         </div>
@@ -244,22 +245,15 @@ $canViewStory = $isOwnProfile || (($relationship['status'] ?? '') === 'friends')
         </form>
     </div>
     <div class="profile-settings">
-        <h3>Account</h3>
+        <h3>Change Password</h3>
         <form method="POST" action="index.php?page=profile">
             <input type="hidden" name="action" value="update_account">
             <div class="form-group">
-                <label for="new_username">Username</label>
-                <input type="text" id="new_username" name="username" value="<?php echo htmlspecialchars($user['username']); ?>" required>
+                <label for="new_password">New Password</label>
+                <input type="password" id="new_password" name="password" placeholder="Enter new password" required>
+                <small>Password must be at least 8 characters with uppercase, lowercase, and numbers</small>
             </div>
-            <div class="form-group">
-                <label for="new_email">Email</label>
-                <input type="email" id="new_email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
-            </div>
-            <div class="form-group">
-                <label for="new_password">New password (optional)</label>
-                <input type="password" id="new_password" name="password" placeholder="Leave blank to keep current">
-            </div>
-            <button type="submit" class="btn btn-primary">Update Account</button>
+            <button type="submit" class="btn btn-primary">Change Password</button>
         </form>
     </div>
     <?php if (!empty($pendingRequests)): ?>

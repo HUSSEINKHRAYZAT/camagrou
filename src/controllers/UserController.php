@@ -102,19 +102,14 @@ class UserController {
                 exit;
             }
 
-            // Account update (username/email/password)
+            // Account update (password change only)
             if ($userId == $viewerId && isset($_POST['action']) && $_POST['action'] === 'update_account') {
-                $newUsername = trim($_POST['username'] ?? '');
-                $newEmail = trim($_POST['email'] ?? '');
                 $newPassword = $_POST['password'] ?? '';
                 $errors = [];
-                if (strlen($newUsername) < 3) {
-                    $errors[] = "Username must be at least 3 characters.";
-                }
-                if (!filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
-                    $errors[] = "Invalid email.";
-                }
-                if (!empty($newPassword)) {
+                
+                if (empty($newPassword)) {
+                    $errors[] = "Password is required.";
+                } else {
                     $hasUpper = preg_match('/[A-Z]/', $newPassword);
                     $hasLower = preg_match('/[a-z]/', $newPassword);
                     $hasNum = preg_match('/[0-9]/', $newPassword);
@@ -122,10 +117,10 @@ class UserController {
                         $errors[] = "Password must be at least 8 chars and include upper, lower and number.";
                     }
                 }
+                
                 if (empty($errors)) {
-                    $this->userModel->updateAccount($viewerId, $newUsername, $newEmail, $newPassword ?: null);
-                    $_SESSION['success'] = "Account updated.";
-                    $_SESSION['username'] = $newUsername;
+                    $this->userModel->updatePassword($viewerId, $newPassword);
+                    $_SESSION['success'] = "Password changed successfully!";
                 } else {
                     $_SESSION['errors'] = $errors;
                 }
@@ -207,8 +202,8 @@ class UserController {
         $images = $this->imageModel->getUserImages($userId);
         $suggestions = $this->userModel->findSuggestions($userId, 8);
         $pendingRequests = ($userId == $_SESSION['user_id']) ? $this->friendshipModel->getPendingRequests($userId) : [];
-        $canViewStory = ($userId == $viewerId) || ($relationship['status'] === 'friends');
-        $activeStory = $canViewStory ? $this->userModel->getActiveStory($userId) : null;
+        $canViewStory = true; // Anyone can view stories
+        $activeStory = $this->userModel->getActiveStory($userId);
         $headerNotifications = $this->notificationModel->getUnread($_SESSION['user_id']);
         $friends = $this->friendshipModel->getFriends($userId, 100);
         $friendCount = $this->friendshipModel->countFriends($userId);

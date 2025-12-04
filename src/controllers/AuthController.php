@@ -80,7 +80,28 @@ class AuthController {
             
             if ($user && password_verify($password, $user['password'])) {
                 if (!$user['verified']) {
-                    $_SESSION['errors'] = ["Please verify your email before logging in."];
+                    // User is not verified - resend OTP and redirect to verification
+                    $otpCode = $this->userModel->resendOTP($user['email']);
+                    
+                    if ($otpCode) {
+                        // Store email in session for verification page
+                        $_SESSION['pending_verification_email'] = $user['email'];
+                        $_SESSION['pending_otp_code'] = $otpCode;
+                        
+                        // Try to send email
+                        $emailSent = $this->emailService->sendVerificationEmail($user['email'], $user['username'], $otpCode);
+                        
+                        if ($emailSent) {
+                            $_SESSION['success'] = "Your account is not verified. A new verification code has been sent to your email.";
+                        } else {
+                            $_SESSION['warning'] = "Your account is not verified.<br><br>🔑 <strong>Your verification code is: <span style='font-size: 24px; color: #667eea; letter-spacing: 5px; font-family: monospace;'>" . $otpCode . "</span></strong><br><br>Enter this code below to verify your account.";
+                        }
+                        
+                        header('Location: index.php?page=verify_otp');
+                        exit;
+                    } else {
+                        $_SESSION['errors'] = ["Unable to generate verification code. Please contact support."];
+                    }
                 } else {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['username'] = $user['username'];

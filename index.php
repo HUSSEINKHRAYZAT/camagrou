@@ -94,6 +94,14 @@ switch ($page) {
         $controller = new NotificationController();
         $controller->clearAll();
         break;
+    
+    case 'fix-friends':
+        if (!$isLoggedIn) {
+            header('Location: index.php?page=login');
+            exit;
+        }
+        require 'src/views/fix_friends.php';
+        break;
         
     default:
         header('HTTP/1.0 404 Not Found');

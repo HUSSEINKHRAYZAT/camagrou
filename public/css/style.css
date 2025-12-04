@@ -166,6 +166,34 @@ h2 {
     text-decoration: none;
 }
 
+.logo-text {
+    font-family: 'Brush Script MT', 'Lucida Handwriting', 'Apple Chancery', cursive, 'Inter', sans-serif;
+    font-size: 2.5rem;
+    font-weight: 400;
+    font-style: italic;
+    letter-spacing: 0.02em;
+    text-shadow: 2px 3px 6px rgba(0, 0, 0, 0.25);
+    transition: transform 0.3s ease;
+}
+
+.logo-text:hover {
+    transform: translateY(-2px);
+}
+
+.logo-part-1 {
+    background: linear-gradient(135deg, #1a3a52 0%, #2d5a7b 50%, #4a7a9a 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.logo-part-2 {
+    background: linear-gradient(135deg, #4a8c5a 0%, #5fa86f 50%, #7bc98d 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
 .logo-img {
     height: 42px;
     width: auto;
@@ -256,6 +284,12 @@ h2 {
 .alert-success {
     border-left: 4px solid var(--success);
     color: color-mix(in srgb, var(--success) 70%, var(--text-primary));
+}
+
+.alert-warning {
+    border-left: 4px solid var(--warning);
+    color: color-mix(in srgb, var(--warning) 70%, var(--text-primary));
+    background: color-mix(in srgb, var(--warning) 8%, var(--bg-elevated));
 }
 
 .alert-error {
@@ -1150,6 +1184,30 @@ video, canvas {
     object-fit: contain;
     display: block;
     background: #000;
+}
+
+.story-viewer__close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 10;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    border: none;
+    font-size: 2rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.story-viewer__close:hover {
+    background: rgba(0, 0, 0, 0.9);
 }
 
 .story-progress {

@@ -14,6 +14,23 @@ class User {
         $otpExpiry = date('Y-m-d H:i:s', strtotime('+15 minutes')); // OTP expires in 15 minutes
         
         try {
+            // First check if username already exists
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM users WHERE username = ?");
+            $stmt->execute([$username]);
+            if ($stmt->fetchColumn() > 0) {
+                error_log("Registration failed: Username '$username' already exists");
+                return false;
+            }
+            
+            // Check if email already exists
+            $stmt = $this->pdo->prepare("SELECT COUNT(*) FROM users WHERE email = ?");
+            $stmt->execute([$email]);
+            if ($stmt->fetchColumn() > 0) {
+                error_log("Registration failed: Email '$email' already exists");
+                return false;
+            }
+            
+            // Create the user
             $stmt = $this->pdo->prepare("
                 INSERT INTO users (username, email, password, verification_token, otp_expiry) 
                 VALUES (?, ?, ?, ?, ?)
@@ -21,6 +38,7 @@ class User {
             $stmt->execute([$username, $email, $hashedPassword, $otpCode, $otpExpiry]);
             return $otpCode;
         } catch (PDOException $e) {
+            error_log("Registration error: " . $e->getMessage());
             return false;
         }
     }
@@ -197,6 +215,12 @@ class User {
             WHERE id = ?
         ");
         return $stmt->execute($params);
+    }
+    
+    public function updatePassword($userId, $newPassword) {
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        $stmt = $this->pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        return $stmt->execute([$hashedPassword, $userId]);
     }
 
     private function ensureResetTable() {
