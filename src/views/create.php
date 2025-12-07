@@ -76,9 +76,9 @@ include 'header.php';
                 </div>
                 <div class="picker-grid" id="stickerList">
                     <?php $stickers = [
-                        ['file' => 'sticker1.png', 'label' => 'Star Burst', 'category' => 'fun'],
-                        ['file' => 'sticker2.png', 'label' => 'Retro Cam', 'category' => 'retro'],
-                        ['file' => 'sticker3.png', 'label' => 'Cherry Pop', 'category' => 'fun'],
+                        ['file' => 'sticker1.svg', 'label' => 'Star Burst', 'category' => 'fun'],
+                        ['file' => 'sticker2.svg', 'label' => 'Retro Cam', 'category' => 'retro'],
+                        ['file' => 'sticker3.svg', 'label' => 'Cherry Pop', 'category' => 'fun'],
                         ['file' => 'sticker4.svg', 'label' => 'Sunset', 'category' => 'fun'],
                         ['file' => 'sticker5.svg', 'label' => 'Soft Blob', 'category' => 'retro']
                     ]; ?>

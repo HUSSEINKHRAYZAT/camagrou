@@ -1,7 +1,8 @@
 <?php 
 $title = 'Profile - Camagru';
 include 'header.php'; 
-$isOwnProfile = ($user['id'] == $_SESSION['user_id']);
+$isLoggedIn = isset($_SESSION['user_id']);
+$isOwnProfile = $isLoggedIn && ($user['id'] == $_SESSION['user_id']);
 $relationship = $relationship ?? ['status' => 'none'];
 $postCount = count($images);
 $friendCount = $friendCount ?? ($user['friend_count'] ?? 0);
@@ -12,6 +13,7 @@ $avatarSrc = $user['avatar'] ?? '';
 $suggestions = $suggestions ?? [];
 $pendingRequests = $pendingRequests ?? [];
 $activeStory = $activeStory ?? null;
+$activeStories = $activeStories ?? [];
 $canViewStory = $canViewStory ?? false; // Use the value from controller
 ?>
 
@@ -167,34 +169,86 @@ $canViewStory = $canViewStory ?? false; // Use the value from controller
         <?php if ($isOwnProfile): ?>
             <button type="button" class="story-ring story-ring--add" id="addStoryBtn">
                 <span class="story-plus">+</span>
-                <small id="addStoryLabel">Add Story</small>
+                <small id="addStoryLabel"><?php echo !empty($activeStories) ? 'Add More' : 'Add Story'; ?></small>
             </button>
             <form method="POST" action="index.php?page=profile" enctype="multipart/form-data" id="storyForm">
                 <input type="hidden" name="action" value="update_story">
                 <input type="file" id="storyUpload" name="story_file" accept="image/*" style="display:none;">
             </form>
         <?php endif; ?>
-        <button type="button" class="story-ring story-ring--active <?php echo $activeStory ? 'has-story' : ''; ?>" id="storyActiveRing" data-story="<?php echo $activeStory ? htmlspecialchars($activeStory['story_path']) : ''; ?>" aria-hidden="<?php echo $activeStory ? 'false' : 'true'; ?>">
-            <span class="story-thumb" id="storyThumb" style="<?php echo $activeStory ? "background-image:url('".$activeStory['story_path']."');" : 'display:none;'; ?>"></span>
-            <span class="story-dot"></span>
-            <small id="storyLabel">
-                <?php 
-                if ($activeStory) {
-                    echo 'View Story';
-                } else {
-                    echo 'No story yet';
-                }
-                ?>
-            </small>
-        </button>
-        <p class="story-empty">Stories last 24 hours.</p>
+        
+        <?php if (!empty($activeStories)): ?>
+            <?php foreach ($activeStories as $index => $story): ?>
+                <button type="button" 
+                        class="story-ring story-ring--active has-story story-item" 
+                        data-story="<?php echo htmlspecialchars($story['story_path']); ?>"
+                        data-story-index="<?php echo $index; ?>"
+                        data-story-timestamp="<?php echo htmlspecialchars($story['created_at']); ?>"
+                        data-story-count="<?php echo count($activeStories); ?>">
+                    <span class="story-thumb" style="background-image:url('<?php echo htmlspecialchars($story['story_path']); ?>');"></span>
+                    <span class="story-dot"></span>
+                    <small><?php echo $index + 1; ?></small>
+                </button>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <button type="button" class="story-ring story-ring--active" disabled>
+                <span class="story-dot"></span>
+                <small>No stories</small>
+            </button>
+        <?php endif; ?>
+        
+        <p class="story-empty">Stories last 24 hours. <?php echo !empty($activeStories) ? count($activeStories) . ' active' : ''; ?></p>
     </div>
+    
     <div class="story-viewer" id="storyViewer" aria-hidden="true">
         <div class="story-viewer__backdrop"></div>
-        <div class="story-viewer__content">
-            <button type="button" class="story-viewer__close" id="closeStoryViewer" aria-label="Close story">&times;</button>
-            <div class="story-progress"><div class="story-progress__bar" id="storyProgressBar"></div></div>
-            <img id="storyViewerImg" alt="Story">
+        <div class="story-viewer__container">
+            <!-- Header with user info and close button -->
+            <div class="story-viewer__header">
+                <div class="story-viewer__user-info">
+                    <div class="story-viewer__avatar">
+                        <?php if (!empty($avatarSrc)): ?>
+                            <img src="<?php echo htmlspecialchars($avatarSrc); ?>" alt="<?php echo htmlspecialchars($user['username']); ?>">
+                        <?php else: ?>
+                            <span><?php echo htmlspecialchars($avatarLetter); ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="story-viewer__user-details">
+                        <span class="story-viewer__username"><?php echo htmlspecialchars($user['username']); ?></span>
+                        <span class="story-viewer__time" id="storyTime">2h ago</span>
+                    </div>
+                </div>
+                <button type="button" class="story-viewer__close" id="closeStoryViewer" aria-label="Close story">&times;</button>
+            </div>
+
+            <!-- Progress bars (one for each story) -->
+            <div class="story-viewer__progress-bars" id="storyProgressBars">
+                <!-- Dynamically generated progress bars -->
+            </div>
+
+            <!-- Story content area -->
+            <div class="story-viewer__content">
+                <img id="storyViewerImg" alt="Story">
+                
+                <!-- Navigation areas (tap left/right side) -->
+                <div class="story-viewer__tap-area story-viewer__tap-area--left" id="tapPrev"></div>
+                <div class="story-viewer__tap-area story-viewer__tap-area--right" id="tapNext"></div>
+                
+                <!-- Navigation buttons (visible on hover) -->
+                <button type="button" class="story-viewer__nav story-viewer__nav--prev" id="prevStory" aria-label="Previous story">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <button type="button" class="story-viewer__nav story-viewer__nav--next" id="nextStory" aria-label="Next story">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Story counter (bottom right) -->
+            <div class="story-viewer__counter" id="storyCounter">1 / 1</div>
         </div>
     </div>
 </section>
@@ -356,7 +410,5 @@ $canViewStory = $canViewStory ?? false; // Use the value from controller
     <?php endif; ?>
 </div>
 
-<?php include 'footer.php'; ?>
-<?php if ($isOwnProfile): ?>
 <script src="public/js/profile.js"></script>
-<?php endif; ?>
+<?php include 'footer.php'; ?>

@@ -22,12 +22,34 @@ class UserController {
     }
     
     public function profile() {
-        $userId = $_GET['user_id'] ?? $_SESSION['user_id'];
-        $viewerId = $_SESSION['user_id'];
+        // Allow viewing profiles without login
+        $isLoggedIn = isset($_SESSION['user_id']);
+        
+        // If no user_id specified and not logged in, redirect to gallery
+        if (!isset($_GET['user_id']) && !$isLoggedIn) {
+            header('Location: index.php?page=gallery');
+            exit;
+        }
+        
+        $userId = $_GET['user_id'] ?? ($_SESSION['user_id'] ?? null);
+        if (!$userId) {
+            header('Location: index.php?page=gallery');
+            exit;
+        }
+        
+        $viewerId = $_SESSION['user_id'] ?? null;
         $this->userModel->ensureProfileTable();
-        $relationship = $this->friendshipModel->getRelationship($viewerId, $userId);
+        
+        // Only get relationship if viewer is logged in
+        $relationship = $viewerId ? $this->friendshipModel->getRelationship($viewerId, $userId) : ['status' => 'none'];
         
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // POST actions require login
+            if (!$isLoggedIn) {
+                header('Location: index.php?page=login');
+                exit;
+            }
+            
             // Settings update for own profile
             if ($userId == $viewerId && isset($_POST['email_notifications'])) {
                 $notifications = isset($_POST['email_notifications']) ? 1 : 0;
@@ -201,14 +223,15 @@ class UserController {
         $user = $this->userModel->findById($userId);
         $images = $this->imageModel->getUserImages($userId);
         $suggestions = $this->userModel->findSuggestions($userId, 8);
-        $pendingRequests = ($userId == $_SESSION['user_id']) ? $this->friendshipModel->getPendingRequests($userId) : [];
+        $pendingRequests = ($isLoggedIn && $userId == $_SESSION['user_id']) ? $this->friendshipModel->getPendingRequests($userId) : [];
         $canViewStory = true; // Anyone can view stories
         $activeStory = $this->userModel->getActiveStory($userId);
-        $headerNotifications = $this->notificationModel->getUnread($_SESSION['user_id']);
+        $activeStories = $this->userModel->getActiveStories($userId);
+        $headerNotifications = $isLoggedIn ? $this->notificationModel->getUnread($_SESSION['user_id']) : [];
         $friends = $this->friendshipModel->getFriends($userId, 100);
         $friendCount = $this->friendshipModel->countFriends($userId);
         $messages = [];
-        if ($relationship['status'] === 'friends' && $userId != $viewerId) {
+        if ($isLoggedIn && $relationship['status'] === 'friends' && $userId != $viewerId) {
             $messages = $this->messageModel->getConversation($viewerId, $userId, 100);
         }
         

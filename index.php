@@ -64,6 +64,18 @@ switch ($page) {
         $controller = new AuthController();
         $controller->resendOTP();
         break;
+    
+    case 'verify_reset_otp':
+        require_once 'src/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->verifyResetOTP();
+        break;
+    
+    case 'resend_reset_otp':
+        require_once 'src/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->resendResetOTP();
+        break;
         
     case 'create':
         if (!$isLoggedIn) {
@@ -76,10 +88,7 @@ switch ($page) {
         break;
         
     case 'profile':
-        if (!$isLoggedIn) {
-            header('Location: index.php?page=login');
-            exit;
-        }
+        // Allow anyone to view profiles (no login required)
         require_once 'src/controllers/UserController.php';
         $controller = new UserController();
         $controller->profile();

@@ -122,48 +122,143 @@ class AuthController {
             if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                 $_SESSION['errors'] = ["Enter a valid email."];
             } else {
-                $token = $this->userModel->createResetToken($email);
-                if ($token) {
-                    $user = $this->userModel->findByEmail($email);
-                    if ($user) {
-                        $this->emailService->sendPasswordResetEmail($email, $user['username'], $token);
+                $user = $this->userModel->findByEmail($email);
+                if ($user) {
+                    // Generate OTP code
+                    $otpCode = $this->userModel->createResetOTP($email);
+                    
+                    if ($otpCode) {
+                        // Try to send email
+                        $emailSent = $this->emailService->sendPasswordResetOTP($email, $user['username'], $otpCode);
+                        
+                        // Store email in session for verification
+                        $_SESSION['reset_email'] = $email;
+                        $_SESSION['reset_otp_code'] = $otpCode;
+                        
+                        if ($emailSent) {
+                            $_SESSION['success'] = "A 6-digit verification code has been sent to your email.";
+                        } else {
+                            $_SESSION['warning'] = "Password reset initiated.<br><br>🔑 <strong>Your verification code is: <span style='font-size: 24px; color: #667eea; letter-spacing: 5px; font-family: monospace;'>" . $otpCode . "</span></strong><br><br>Enter this code on the next page.";
+                        }
+                        
+                        header('Location: index.php?page=verify_reset_otp');
+                        exit;
                     }
                 }
+                
                 // Always show success message (security best practice - don't reveal if email exists)
-                $_SESSION['success'] = "If the email exists, a reset link was sent.";
-                header('Location: index.php?page=login');
+                $_SESSION['success'] = "If the email exists, a verification code has been sent.";
+                header('Location: index.php?page=verify_reset_otp');
                 exit;
             }
         }
         require_once 'src/views/forgot_password.php';
     }
-
-    public function resetPassword() {
-        $token = $_GET['token'] ?? ($_POST['token'] ?? '');
+    
+    public function verifyResetOTP() {
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $password = $_POST['password'] ?? '';
-            $confirm = $_POST['confirm_password'] ?? '';
-            if ($password !== $confirm) {
-                $_SESSION['errors'] = ["Passwords do not match."];
+            $email = trim($_POST['email'] ?? '');
+            $otpCode = trim($_POST['otp_code'] ?? '');
+            
+            if (empty($email) || empty($otpCode)) {
+                $_SESSION['errors'] = ["Please enter your email and verification code."];
+            } elseif (!preg_match('/^\d{6}$/', $otpCode)) {
+                $_SESSION['errors'] = ["Verification code must be 6 digits."];
             } else {
-                $check = $this->userModel->validateResetToken($token);
-                if ($check) {
-                    $hasUpper = preg_match('/[A-Z]/', $password);
-                    $hasLower = preg_match('/[a-z]/', $password);
-                    $hasNum = preg_match('/[0-9]/', $password);
-                    if (strlen($password) < 8 || !$hasUpper || !$hasLower || !$hasNum) {
-                        $_SESSION['errors'] = ["Password must be at least 8 chars and include upper, lower and number."]; 
-                    } else {
-                        $this->userModel->updatePasswordById($check['user_id'], $password);
-                        $_SESSION['success'] = "Password updated. Please login.";
-                        header('Location: index.php?page=login');
-                        exit;
-                    }
+                $user = $this->userModel->verifyResetOTP($email, $otpCode);
+                
+                if ($user) {
+                    // OTP verified - store in session for password reset page
+                    $_SESSION['verified_reset_email'] = $email;
+                    $_SESSION['verified_reset_user_id'] = $user['id'];
+                    unset($_SESSION['reset_email']);
+                    unset($_SESSION['reset_otp_code']);
+                    
+                    $_SESSION['success'] = "Code verified! Please enter your new password.";
+                    header('Location: index.php?page=reset_password');
+                    exit;
                 } else {
-                    $_SESSION['errors'] = ["Invalid or expired reset link."];
+                    $_SESSION['errors'] = ["Invalid or expired verification code. Please try again."];
                 }
             }
         }
+        
+        require_once 'src/views/verify_reset_otp.php';
+    }
+    
+    public function resendResetOTP() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email = trim($_POST['email'] ?? '');
+            
+            if (empty($email)) {
+                $_SESSION['errors'] = ["Please enter your email address."];
+            } else {
+                $user = $this->userModel->findByEmail($email);
+                if ($user) {
+                    $otpCode = $this->userModel->createResetOTP($email);
+                    
+                    if ($otpCode) {
+                        $emailSent = $this->emailService->sendPasswordResetOTP($email, $user['username'], $otpCode);
+                        
+                        $_SESSION['reset_otp_code'] = $otpCode;
+                        
+                        if ($emailSent) {
+                            $_SESSION['success'] = "A new verification code has been sent to your email.";
+                        } else {
+                            $_SESSION['warning'] = "New code generated.<br><br>🔑 <strong>Your code is: <span style='font-size: 24px; color: #667eea; letter-spacing: 5px; font-family: monospace;'>" . $otpCode . "</span></strong>";
+                        }
+                    }
+                } else {
+                    $_SESSION['success'] = "If the email exists, a new code has been sent.";
+                }
+            }
+            
+            header('Location: index.php?page=verify_reset_otp');
+            exit;
+        }
+        
+        require_once 'src/views/verify_reset_otp.php';
+    }
+
+    public function resetPassword() {
+        // Check if user has verified OTP
+        if (!isset($_SESSION['verified_reset_email']) || !isset($_SESSION['verified_reset_user_id'])) {
+            $_SESSION['errors'] = ["Please verify your email first."];
+            header('Location: index.php?page=forgot_password');
+            exit;
+        }
+        
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $password = $_POST['password'] ?? '';
+            $confirm = $_POST['confirm_password'] ?? '';
+            
+            if ($password !== $confirm) {
+                $_SESSION['errors'] = ["Passwords do not match."];
+            } else {
+                $hasUpper = preg_match('/[A-Z]/', $password);
+                $hasLower = preg_match('/[a-z]/', $password);
+                $hasNum = preg_match('/[0-9]/', $password);
+                
+                if (strlen($password) < 8 || !$hasUpper || !$hasLower || !$hasNum) {
+                    $_SESSION['errors'] = ["Password must be at least 8 chars and include upper, lower and number."]; 
+                } else {
+                    // Update password
+                    $this->userModel->updatePasswordById($_SESSION['verified_reset_user_id'], $password);
+                    
+                    // Clear OTP from database
+                    $this->userModel->clearOTP($_SESSION['verified_reset_email']);
+                    
+                    // Clear session variables
+                    unset($_SESSION['verified_reset_email']);
+                    unset($_SESSION['verified_reset_user_id']);
+                    
+                    $_SESSION['success'] = "Password updated successfully! You can now log in.";
+                    header('Location: index.php?page=login');
+                    exit;
+                }
+            }
+        }
+        
         require_once 'src/views/reset_password.php';
     }
     

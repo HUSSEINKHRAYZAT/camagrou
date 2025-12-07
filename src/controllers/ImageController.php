@@ -3,16 +3,22 @@
 require_once 'src/models/Image.php';
 require_once 'src/models/Comment.php';
 require_once 'src/models/Like.php';
+require_once 'src/models/User.php';
+require_once 'src/services/EmailService.php';
 
 class ImageController {
     private $imageModel;
     private $commentModel;
     private $likeModel;
+    private $userModel;
+    private $emailService;
     
     public function __construct() {
         $this->imageModel = new Image();
         $this->commentModel = new Comment();
         $this->likeModel = new Like();
+        $this->userModel = new User();
+        $this->emailService = new EmailService();
     }
     
     public function create() {
@@ -60,8 +66,46 @@ class ImageController {
         $comment = trim($_POST['comment'] ?? '');
         
         if (!empty($comment) && $imageId > 0) {
+            // Save the comment
             $this->commentModel->create($imageId, $_SESSION['user_id'], $comment);
-            // In production, send email notification to image owner
+            
+            // MANDATORY FEATURE: Send email notification to image owner
+            try {
+                // Get image owner information
+                $imageOwner = $this->imageModel->getImageOwner($imageId);
+                
+                // Only send notification if:
+                // 1. Image owner exists
+                // 2. Commenter is not the image owner (don't notify yourself)
+                // 3. Owner has email notifications enabled
+                if ($imageOwner && 
+                    $imageOwner['id'] != $_SESSION['user_id'] && 
+                    $imageOwner['email_notifications']) {
+                    
+                    // Get commenter information
+                    $commenter = $this->userModel->findById($_SESSION['user_id']);
+                    
+                    // Send the notification email
+                    $emailSent = $this->emailService->sendCommentNotification(
+                        $imageOwner['email'],
+                        $imageOwner['username'],
+                        $commenter['username'],
+                        $comment,
+                        $imageId
+                    );
+                    
+                    if ($emailSent) {
+                        error_log("✅ Comment notification sent to {$imageOwner['username']} about comment from {$commenter['username']}");
+                    } else {
+                        error_log("⚠️ Failed to send comment notification email (SMTP may not be configured)");
+                    }
+                }
+            } catch (Exception $e) {
+                error_log("❌ Error sending comment notification: " . $e->getMessage());
+                // Don't stop the process if email fails - comment is still saved
+            }
+            
+            $_SESSION['success'] = "Comment added successfully!";
         }
         
         header('Location: ' . $_SERVER['HTTP_REFERER']);

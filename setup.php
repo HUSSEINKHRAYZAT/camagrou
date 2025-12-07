@@ -23,6 +23,7 @@ try {
             password VARCHAR(255) NOT NULL,
             verified BOOLEAN DEFAULT FALSE,
             verification_token VARCHAR(255),
+            otp_expiry TIMESTAMP NULL DEFAULT NULL,
             email_notifications BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

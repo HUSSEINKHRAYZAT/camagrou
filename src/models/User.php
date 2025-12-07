@@ -263,6 +263,59 @@ class User {
         $stmt->execute([$token]);
         return $stmt->fetch();
     }
+    
+    /**
+     * Create password reset OTP code
+     */
+    public function createResetOTP($email) {
+        $user = $this->findByEmail($email);
+        if (!$user) {
+            return null;
+        }
+        
+        // Generate 6-digit OTP
+        $otpCode = sprintf("%06d", mt_rand(0, 999999));
+        $otpExpiry = date('Y-m-d H:i:s', strtotime('+15 minutes'));
+        
+        // Store OTP in verification_token temporarily for password reset
+        $stmt = $this->pdo->prepare("
+            UPDATE users 
+            SET verification_token = ?, otp_expiry = ? 
+            WHERE email = ?
+        ");
+        
+        if ($stmt->execute([$otpCode, $otpExpiry, $email])) {
+            return $otpCode;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Verify password reset OTP
+     */
+    public function verifyResetOTP($email, $otpCode) {
+        $stmt = $this->pdo->prepare("
+            SELECT id, username FROM users 
+            WHERE email = ? 
+            AND verification_token = ? 
+            AND otp_expiry > NOW()
+        ");
+        $stmt->execute([$email, $otpCode]);
+        return $stmt->fetch();
+    }
+    
+    /**
+     * Clear OTP after successful verification
+     */
+    public function clearOTP($email) {
+        $stmt = $this->pdo->prepare("
+            UPDATE users 
+            SET verification_token = NULL, otp_expiry = NULL 
+            WHERE email = ?
+        ");
+        return $stmt->execute([$email]);
+    }
 
     public function updatePasswordById($userId, $newPassword) {
         $stmt = $this->pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
@@ -309,5 +362,17 @@ class User {
         ");
         $stmt->execute([$userId]);
         return $stmt->fetch();
+    }
+
+    public function getActiveStories($userId) {
+        $this->ensureStoriesTable();
+        $stmt = $this->pdo->prepare("
+            SELECT id, filename AS story_path, created_at, expires_at 
+            FROM stories 
+            WHERE user_id = ? AND expires_at > NOW()
+            ORDER BY created_at DESC
+        ");
+        $stmt->execute([$userId]);
+        return $stmt->fetchAll();
     }
 }
