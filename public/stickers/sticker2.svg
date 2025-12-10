@@ -1,6 +1,0 @@
-<!-- Placeholder SVG for sticker2 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150">
-  <rect x="20" y="30" width="110" height="90" rx="15" fill="#FF6B6B" stroke="#C92A2A" stroke-width="3"/>
-  <polygon points="75,20 85,40 105,45 90,60 95,80 75,70 55,80 60,60 45,45 65,40" fill="#FFD700"/>
-  <text x="75" y="140" font-size="12" text-anchor="middle" fill="#000">⭐ Cool</text>
-</svg>

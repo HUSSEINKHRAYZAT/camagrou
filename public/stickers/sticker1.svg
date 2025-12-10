@@ -1,8 +1,0 @@
-<!-- Placeholder SVG for sticker1 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150">
-  <circle cx="75" cy="75" r="70" fill="#FFD700" stroke="#FFA500" stroke-width="3"/>
-  <circle cx="55" cy="60" r="8" fill="#000"/>
-  <circle cx="95" cy="60" r="8" fill="#000"/>
-  <path d="M 45 90 Q 75 110 105 90" stroke="#000" stroke-width="3" fill="none"/>
-  <text x="75" y="140" font-size="12" text-anchor="middle" fill="#000">😊 Smile</text>
-</svg>
