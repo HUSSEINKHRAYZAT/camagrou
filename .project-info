@@ -1,0 +1,45 @@
+# Camagru Project Information
+# Quick reference for development
+
+## Project: Camagru - Social Media Photo Sharing
+## Version: 1.0.0
+## Date: December 2025
+## School: 42
+
+## Tech Stack
+- PHP 8.1
+- MySQL 8.0
+- Docker & Docker Compose
+- Vanilla JavaScript
+- HTML5 Canvas
+
+## Key Features
+- Live camera capture
+- 28+ interactive stickers (resize, rotate)
+- 10+ emojis
+- 7 Instagram-style filters
+- Friend system
+- 24-hour stories
+- Direct messaging
+- Email OTP verification
+
+## Quick Commands
+make help       # Show all commands
+make build      # Build containers
+make up         # Start services
+make logs       # View logs
+make status     # Check status
+
+## URLs
+http://localhost:8080  # Main application
+http://localhost:8081  # PHPMyAdmin
+
+## Database
+Host: db
+User: camagru_user
+Pass: camagru_pass
+DB:   camagru
+
+## Documentation
+README.md       # Full documentation
+QUICKSTART.md   # Quick reference

@@ -1,0 +1,41 @@
+# Git files
+.git
+.gitignore
+
+# Composer
+vendor/
+composer.lock
+
+# Docker files
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Documentation
+*.md
+README.md
+en.subject.pdf
+
+# Temporary files
+*.log
+*.tmp
+
+# Node modules if any
+node_modules
+npm-debug.log
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Verification scripts
+verify*.php
+verify.sh
+test_*.php

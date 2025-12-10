@@ -1,0 +1,7 @@
+<!-- Placeholder SVG for sticker3 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150" viewBox="0 0 150 150">
+  <path d="M 75 20 Q 100 40 110 70 Q 110 100 75 120 Q 40 100 40 70 Q 50 40 75 20" fill="#FF1493" stroke="#C71585" stroke-width="3"/>
+  <circle cx="65" cy="60" r="5" fill="#FFF"/>
+  <circle cx="85" cy="60" r="5" fill="#FFF"/>
+  <text x="75" y="140" font-size="12" text-anchor="middle" fill="#000">💖 Love</text>
+</svg>

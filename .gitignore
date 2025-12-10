@@ -1,0 +1,43 @@
+# Environment variables (contains secrets!)
+.env
+env
+
+# Python virtual environment
+.venv/
+venv/
+
+# Composer
+/vendor/
+
+# Uploads
+/public/uploads/*
+!/public/uploads/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Documentation (temporary)
+*_FIXED.md
+*_IMPLEMENTED.md
+*_COMPLETE.md
+*_ANALYSIS.md
+PROJECT_*.md
+STORY_*.md
+*_REFERENCE.md
+
+# Test files
+test_*.php
+cleanup_*.php
+migrate.php
+api.php
+
+# Subject PDF
+*.pdf
